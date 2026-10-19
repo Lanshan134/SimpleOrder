@@ -1,4 +1,4 @@
-param([string]$Executable = "$PSScriptRoot/../outputs/SimpleOrder-v0.2/SimpleOrder.exe")
+param([string]$Executable = "$PSScriptRoot/../outputs/SimpleOrder/SimpleOrder.exe")
 $ErrorActionPreference = 'Stop'
 $env:QT_QPA_PLATFORM = 'windows'
 # 自检内部使用 WA_DontShowOnScreen，隔离数据库写在当前目录 test-results 下。

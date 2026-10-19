@@ -2,7 +2,11 @@
 
 桌面一角，井然有序。
 
-Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.2 源码开发版；本地 `outputs/` 中旧安装包不代表最新源码。
+Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.3.0-beta.1 试用版；本地 `outputs/` 中旧安装包不代表最新源码。
+
+## 下载试用版
+
+[下载 v0.3.0-beta.1 Windows x64 便携包](https://github.com/Lanshan134/SimpleOrder/releases/tag/v0.3.0-beta.1)。完整解压后运行 `SimpleOrder.exe`，不要单独移动 EXE。[版本说明](docs/release-v0.3.0-beta.1.md)。
 
 ## 分支与协作
 
@@ -43,7 +47,7 @@ git switch --track origin/beta
 .\run.cmd
 ```
 
-`build.cmd` 是原生 CMD 入口，无需修改 PowerShell 执行策略。中文路径使用临时英文目录联接构建；中间文件位于 `build/`，可运行目录位于 `outputs/SimpleOrder-v0.2/`。
+`build.cmd` 是原生 CMD 入口，无需修改 PowerShell 执行策略。中文路径使用临时英文目录联接构建；中间文件位于 `build/`，可运行目录位于 `outputs/SimpleOrder/`。
 
 无参数构建使用开发机默认路径：Qt 为项目下 `work/qt/5.15.2/mingw81_64`，MinGW 为 `D:/CodeApp/Environment/mingw64/bin`。其他机器须传入上述两个参数。VS Code 的 `Ctrl+Shift+B` 使用无参数构建并运行；请按本机环境在 `.vscode/tasks.json` 的构建任务参数中补上 Qt、MinGW 路径。重新编译前先退出运行中的程序。
 
@@ -61,7 +65,7 @@ cmake --build build/cmake
 构建完成后，在项目根目录运行自检：
 
 ```powershell
-$testRun = Start-Process -FilePath .\outputs\SimpleOrder-v0.2\SimpleOrder.exe -ArgumentList '--self-test' -Wait -PassThru
+$testRun = Start-Process -FilePath .\outputs\SimpleOrder\SimpleOrder.exe -ArgumentList '--self-test' -Wait -PassThru
 if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 ```
 
