@@ -91,6 +91,7 @@ if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 ## 文档
 
 - [编辑窗口设计与交互](docs/editor-design.md)
+- [后续开发需求清单](docs/backlog.md)
 - [历史更新记录](CHANGELOG.md)
 - [第三方组件说明](THIRD_PARTY_NOTICES.md)
 
