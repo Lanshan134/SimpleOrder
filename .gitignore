@@ -1,0 +1,44 @@
+# SDKs, builds, runtime distributions and test artifacts
+/work/
+/build/
+/outputs/
+/test-results/
+/release/
+/debug/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/Makefile*
+/.qmake.stash
+
+# Logs, personal databases and backups
+*.log
+*.sqlite
+*.sqlite-*
+*.sqlite.*
+*.db
+*.db-*
+*.bak
+*.user
+*.user.*
+*.obj
+*.o
+*.exe
+*.dll
+*.pdb
+*.zip
+*.7z
+
+# Local environment, credentials and editor state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+/.vscode/*
+!/.vscode/tasks.json
+/.vs/
+Thumbs.db
+.DS_Store
