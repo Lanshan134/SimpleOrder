@@ -4,6 +4,22 @@
 
 Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.2 源码开发版；本地 `outputs/` 中旧安装包不代表最新源码。
 
+## 分支与协作
+
+- `beta`：日常开发与试用分支，结构和功能可能变化。日常修改和功能 PR 以 `beta` 为目标。
+- `main`：稳定版本分支。`beta` 经过构建、自检及实际试用后，通过 PR 合并到 `main`，不直接把未验证的开发改动推入 `main`。
+- 两人同时开发时，从最新 `beta` 创建各自的 `feature/*` 或 `fix/*` 分支，再提交 PR 合并回 `beta`，避免共同推送同一功能分支。
+- 后续试用发布可使用 `v0.3.0-beta.1` 这样的版本标签；创建 `beta` 分支本身不表示已发布该版本。
+
+首次切换到远程开发分支：
+
+```powershell
+git fetch origin
+git switch --track origin/beta
+```
+
+已经有本地 `beta` 时执行 `git switch beta`。开始新工作前先确保当前修改已妥善保存，再用 `git pull --ff-only` 同步。
+
 ## 功能
 
 - 悬浮任务列表与月历两种视图，无边框、置顶、尺寸缩放，背景与文字透明度独立设置。
