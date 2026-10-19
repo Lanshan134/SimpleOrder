@@ -60,7 +60,7 @@ if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 | `taskmanager.pro` / `CMakeLists.txt` | 构建配置 |
 | `.vscode/tasks.json` | 共享 VS Code 构建任务 |
 | `tests/` | 自检启动脚本 |
-| `docs/` | 编辑设计、早期 HTML 原型、上传说明 |
+| `docs/` | 编辑窗口设计与交互说明 |
 | `licenses/` / `THIRD_PARTY_NOTICES.md` | 已有第三方许可文本和说明 |
 | `work/`、`build/`、`outputs/`、`test-results/` | 本地目录，不提交 Git |
 
@@ -71,8 +71,6 @@ if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 ## 文档
 
 - [编辑窗口设计与交互](docs/editor-design.md)
-- [早期 HTML 原型](docs/prototype.html)：可离线打开，仅作历史参考，当前行为以源码为准。
-- [Git 上传前说明](docs/git-upload.md)
 - [历史更新记录](CHANGELOG.md)
 - [第三方组件说明](THIRD_PARTY_NOTICES.md)
 
