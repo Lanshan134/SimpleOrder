@@ -31,6 +31,8 @@ class Calendar : public QCalendarWidget {
   public:
     bool showCompleted = true, displayOutside = true;
     bool previewOnly = false;
+    bool mouseDateSelection = false;
+    std::function<void(bool)> dateGesture;
     int retentionHours = 48, maxDots = 3;
     QList<Item> items;
     std::function<void(qint64, QDate)> schedule;
@@ -98,6 +100,9 @@ class Controller : public QObject {
     QPlainTextEdit *notes = nullptr;
     QTabBar *editorTabs = nullptr;
     QJsonObject editorBaseline;
+    bool dateFieldActive = false, calendarDateEditPending = false;
+    int dateFocusGeneration = 0;
+    bool eventFilter(QObject *, QEvent *) override;
     QPointer<QDialog> itemWindow;
     QJsonObject editorContents() const;
     bool hasEditorChanges() const;
@@ -138,6 +143,7 @@ class Controller : public QObject {
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);
+    void calendarEditorSmokeTest();
     void applyPreferences();
     bool visibleItem(const Item &) const;
     QList<Item> sortedItems(QList<Item>) const;

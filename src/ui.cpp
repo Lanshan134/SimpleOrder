@@ -289,6 +289,24 @@ QDate Calendar::dateAt(const QPoint &p) const {
     return !displayOutside && result.month() != monthShown() ? QDate() : result;
 }
 bool Calendar::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::MouseButtonPress) {
+        auto mouse = static_cast<QMouseEvent *>(event);
+        auto viewport = qobject_cast<QWidget *>(watched);
+        if (mouse->button() == Qt::LeftButton && viewport &&
+            dateAt(viewport->mapTo(this, mouse->pos())).isValid()) {
+            mouseDateSelection = true;
+            if (dateGesture)
+                dateGesture(true);
+        }
+    }
+    if (event->type() == QEvent::MouseButtonRelease && mouseDateSelection) {
+        QTimer::singleShot(0, this, [this] {
+            mouseDateSelection = false;
+            if (dateGesture)
+                dateGesture(false);
+        });
+    }
+
     if (!displayOutside &&
         (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease ||
          event->type() == QEvent::MouseButtonDblClick)) {
@@ -575,8 +593,7 @@ void Controller::buildFloating() {
         planExpand = !planExpand;
         updateLists();
     });
-    connect(floatCal, &QCalendarWidget::selectionChanged, this,
-            [this] { setDate(floatCal->selectedDate()); });
+
     floatCal->schedule = [this](qint64 id, QDate d) { guard([&] { schedule(id, d); }); };
 }
 void Controller::setupFloatingScaling() {
@@ -760,6 +777,7 @@ void Controller::buildManager() {
     title = new QLineEdit;
     title->setMaxLength(200);
     date = new QLineEdit;
+    date->installEventFilter(this);
     date->setPlaceholderText("YYYY-MM-DD（可清空）");
     time = new QLineEdit;
     time->setPlaceholderText("HH:mm（可清空）");
@@ -819,7 +837,19 @@ void Controller::buildManager() {
     status->setObjectName("hint");
     root->addWidget(status);
     connect(search, &QLineEdit::textChanged, this, [this] { updateLists(); });
-    connect(cal, &QCalendarWidget::selectionChanged, this, [this] { setDate(cal->selectedDate()); });
+    for (auto calendar : {cal, floatCal}) {
+        calendar->dateGesture = [this](bool started) {
+            calendarDateEditPending = started && dateFieldActive;
+            if (started)
+                dateFieldActive = false;
+        };
+        connect(calendar, &QCalendarWidget::selectionChanged, this, [this, calendar] {
+            // A mouse click also emits clicked; process it only once, including same-date clicks.
+            if (!calendar->mouseDateSelection)
+                setDate(calendar->selectedDate());
+        });
+        connect(calendar, &QCalendarWidget::clicked, this, [this](QDate d) { setDate(d); });
+    }
     cal->schedule = [this](qint64 id, QDate d) { guard([&] { schedule(id, d); }); };
     connect(todayButton, &QPushButton::clicked, this, [this] { setDate(QDate::currentDate()); });
     connect(dateAdd, &QPushButton::clicked, this, [this] {
@@ -828,14 +858,6 @@ void Controller::buildManager() {
         selected = 0;
         fillEditor();
         title->setFocus();
-    });
-    connect(cal, &QCalendarWidget::clicked, this, [this](QDate d) {
-        if (selected)
-            setDate(d);
-    });
-    connect(floatCal, &QCalendarWidget::clicked, this, [this](QDate d) {
-        if (selected)
-            setDate(d);
     });
 
     connect(showFloat, &QPushButton::clicked, this, [this] {
@@ -984,10 +1006,30 @@ QJsonObject Controller::editorContents() const {
     return result;
 }
 bool Controller::hasEditorChanges() const {
-    return editorContents() != editorBaseline;
+    // An unnamed form is only a date-selection placeholder, not a started creation.
+    return (selected || !title->text().trimmed().isEmpty()) && editorContents() != editorBaseline;
+}
+bool Controller::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == date) {
+        if (event->type() == QEvent::FocusIn || event->type() == QEvent::MouseButtonPress) {
+            ++dateFocusGeneration;
+            dateFieldActive = true;
+        } else if (event->type() == QEvent::FocusOut) {
+            const int generation = ++dateFocusGeneration;
+            // Let the immediately following calendar press consume the date-field intent.
+            QTimer::singleShot(0, this, [this, generation] {
+                if (generation == dateFocusGeneration && !date->hasFocus())
+                    dateFieldActive = false;
+            });
+        }
+    }
+    return QObject::eventFilter(watched, event);
 }
 void Controller::fillEditor() {
     refreshing = true;
+    dateFieldActive = false;
+    calendarDateEditPending = false;
+    date->clearFocus();
     auto found = std::find_if(items.begin(), items.end(), [this](const Item &i) { return i.id == selected; });
     editor->setEnabled(!settingsPreview);
     saveButton->setEnabled(!settingsPreview);
@@ -1197,24 +1239,48 @@ void Controller::editFloatingItem(qint64 id) {
     deleteButton->setVisible(selected != 0);
 }
 void Controller::setDate(QDate d) {
-    if (refreshing || !d.isValid() || day == d)
+    if (refreshing || !d.isValid())
         return;
-    const bool emptyDraft =
-        !selected && title->text().trimmed().isEmpty() && notes->toPlainText().isEmpty() && !dirty;
-    day = d;
-    {
+    const bool editTaskDate =
+        (dateFieldActive || calendarDateEditPending) && type->currentData().toString() == "task";
+    dateFieldActive = false;
+    calendarDateEditPending = false;
+    auto selectDay = [&](QDate value) {
         QSignalBlocker a(cal), b(floatCal);
-        cal->setSelectedDate(d);
-        floatCal->setSelectedDate(d);
+        cal->setSelectedDate(value);
+        floatCal->setSelectedDate(value);
+    };
+    if (settingsPreview) {
+        day = d;
+        selectDay(d);
+        updateLists();
+        return;
     }
-    // A calendar click changes a task's date in the current form, never a plan's bounds.
-    if (!settingsPreview && type->currentData().toString() == "task") {
+    if (editTaskDate) {
+        day = d;
+        selectDay(d);
         date->setText(d.toString(Qt::ISODate));
-        if (emptyDraft) {
-            editorBaseline = editorContents();
-            dirty = false;
-        }
+        date->clearFocus();
+        updateLists();
+        return;
     }
+    if (!selected && !title->text().trimmed().isEmpty()) {
+        // A named, unsaved creation is locked; browsing the calendar keeps its fields intact.
+        day = d;
+        selectDay(d);
+        updateLists();
+        return;
+    }
+    if (selected && !leaveEditor()) {
+        selectDay(day);
+        return;
+    }
+    // Saving ends creation lock. A subsequent calendar click starts a fresh placeholder.
+    day = d;
+    selected = 0;
+    dirty = false;
+    selectDay(d);
+    fillEditor();
     updateLists();
 }
 void Controller::complete(qint64 id, QDate occurrence) {
@@ -1662,6 +1728,7 @@ bool Controller::smokeTest(const QString &dir) {
     fillEditor();
     editorSmokeTest(dir);
     draftSmokeTest(dir);
+    calendarEditorSmokeTest();
     require(settingsSmokeTest(dir), "classified settings regression");
     return true;
 }
@@ -2091,6 +2158,9 @@ void Controller::draftSmokeTest(const QString &dir) {
     const auto taskId = selected;
     const auto original = editorContents();
     const auto originalDate = date->text();
+    QMouseEvent datePress(QEvent::MouseButtonPress, QPointF(5, 5), Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+    QApplication::sendEvent(date, &datePress);
     setDate(day.addDays(2));
     require(selected == taskId && title->text() == "任务日期草稿" &&
                 date->text() == day.toString(Qt::ISODate),
@@ -2131,6 +2201,9 @@ void Controller::draftSmokeTest(const QString &dir) {
         nonmodal = !dialog->isModal() && QApplication::activeModalWidget() == nullptr;
         manager->show();
         const auto dateBefore = date->text();
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(5, 5), Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+        QApplication::sendEvent(date, &press);
         setDate(day.addDays(3));
         movableCalendar =
             selected == taskId && date->text() != dateBefore && title->text() == "保留的未保存名称";
@@ -2177,4 +2250,140 @@ void Controller::draftSmokeTest(const QString &dir) {
     settings.setValue("textOpacity", 100);
     applyFloatingAppearance();
     dirty = false;
+}
+
+void Controller::calendarEditorSmokeTest() {
+    auto require = [](bool ok, const char *why) {
+        if (!ok)
+            throw std::runtime_error(why);
+    };
+    auto stored = [&](qint64 id) {
+        for (auto i : store.all())
+            if (i.id == id)
+                return i;
+        return Item{};
+    };
+    auto clickDateField = [&] {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(5, 5), Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+        QApplication::sendEvent(date, &press);
+    };
+    auto clickDate = [&](Calendar *calendar, QDate target) {
+        calendar->setCurrentPage(target.year(), target.month());
+        auto table = calendar->findChild<QAbstractItemView *>();
+        QApplication::processEvents();
+        int firstNumber = table->model()->index(1, 1).data().toInt();
+        QDate first(target.year(), target.month(), 1);
+        if (firstNumber > 7)
+            first = first.addMonths(-1);
+        first = QDate(first.year(), first.month(), firstNumber);
+        auto offset = first.daysTo(target);
+        auto index = table->model()->index(1 + offset / 7, 1 + offset % 7);
+        auto point = table->visualRect(index).center();
+        auto global = table->viewport()->mapToGlobal(point);
+        QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::LeftButton, Qt::LeftButton,
+                          Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::LeftButton, Qt::NoButton,
+                            Qt::NoModifier);
+        QApplication::sendEvent(table->viewport(), &press);
+        QApplication::sendEvent(table->viewport(), &release);
+        QApplication::processEvents();
+    };
+    dirty = false;
+    selected = 0;
+    fillEditor();
+    const auto count = store.all().size();
+    const QDate a = QDate::currentDate().addDays(4), b = a.addDays(1), c = b.addDays(1);
+    clickDate(cal, a);
+    require(!selected && title->text().isEmpty() && date->text() == a.toString(Qt::ISODate) &&
+                !hasEditorChanges(),
+            "date click opens an unlocked creation placeholder");
+    notes->setPlainText("尚未命名");
+    require(!hasEditorChanges(), "unnamed form does not begin creation");
+    clickDate(cal, b);
+    require(date->text() == b.toString(Qt::ISODate) && title->text().isEmpty() && !hasEditorChanges() &&
+                store.all().size() == count,
+            "empty creation follows calendar without saving or prompting");
+    title->setText("创建锁定验证");
+    clickDate(cal, c);
+    require(!selected && date->text() == b.toString(Qt::ISODate) && title->text() == "创建锁定验证",
+            "named creation locks fields while calendar is browsed");
+    title->clear();
+    clickDate(cal, a);
+    require(date->text() == a.toString(Qt::ISODate) && !hasEditorChanges(),
+            "clearing name unlocks placeholder");
+    title->setText("保存后不能误改日期");
+    saveEditor();
+    const auto id = selected;
+    require(id && !hasEditorChanges(), "saving enters clean existing-item view");
+    clickDate(cal, b);
+    require(!selected && title->text().isEmpty() && date->text() == b.toString(Qt::ISODate) &&
+                stored(id).date == a.toString(Qt::ISODate),
+            "date after Save starts new form without modifying saved task");
+    all->edit(id);
+    require(selected == id && title->text() == stored(id).title, "left list selects existing task");
+    clickDateField();
+    clickDate(cal, c);
+    require(selected == id && date->text() == c.toString(Qt::ISODate) &&
+                stored(id).date == a.toString(Qt::ISODate),
+            "explicit date-field click lets calendar edit deadline only in draft");
+    int prompts = 0;
+    auto answer = [&](QMessageBox::StandardButton button) {
+        auto timer = new QTimer(this);
+        timer->setInterval(0);
+        connect(timer, &QTimer::timeout, this, [&, button] {
+            if (auto box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                ++prompts;
+                box->button(button)->click();
+            }
+        });
+        timer->start();
+        return timer;
+    };
+    auto timer = answer(QMessageBox::Cancel);
+    clickDate(cal, b);
+    timer->stop();
+    delete timer;
+    require(prompts == 1 && selected == id && date->text() == c.toString(Qt::ISODate) &&
+                cal->selectedDate() == c && floatCal->selectedDate() == c,
+            "next calendar click asks once; Cancel restores both calendars and preserves draft");
+    prompts = 0;
+    timer = answer(QMessageBox::Discard);
+    clickDate(cal, b);
+    timer->stop();
+    delete timer;
+    require(prompts == 1 && !selected && title->text().isEmpty() && date->text() == b.toString(Qt::ISODate) &&
+                stored(id).date == a.toString(Qt::ISODate),
+            "Discard opens creation without writing edited task");
+    choose(id);
+    clickDateField();
+    QFocusEvent out(QEvent::FocusOut, Qt::MouseFocusReason);
+    QApplication::sendEvent(date, &out);
+    QApplication::processEvents();
+    clickDate(cal, b);
+    require(!selected && title->text().isEmpty() && stored(id).date == a.toString(Qt::ISODate),
+            "date-field focus loss cancels calendar edit intent");
+    choose(id);
+    title->setText("先改名再选日期");
+    prompts = 0;
+    timer = answer(QMessageBox::Save);
+    clickDate(cal, b);
+    timer->stop();
+    delete timer;
+    require(prompts == 1 && !selected && stored(id).title == "先改名再选日期" &&
+                stored(id).date == a.toString(Qt::ISODate) && date->text() == b.toString(Qt::ISODate),
+            "Save confirms only existing modifications before opening new date form");
+    choose(id);
+    clickDate(cal, a);
+    require(!selected && title->text().isEmpty(),
+            "same-day click also opens creation rather than sticking to saved task");
+    dayItems->edit(id);
+    require(selected == id, "date item list selects existing task");
+    clickDateField();
+    clickDate(floatCal, b);
+    require(selected == id && date->text() == b.toString(Qt::ISODate),
+            "floating calendar honors date-field intent too");
+    fillEditor();
+    clickDate(cal, b);
+    require(!selected && !hasEditorChanges(), "clean existing view switches without any confirmation");
 }
