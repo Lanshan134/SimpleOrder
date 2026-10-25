@@ -10,6 +10,8 @@ Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当
 
 ## 分支与协作
 
+[协作流程与验收约定](CONTRIBUTING.md) · [里程碑](https://github.com/Lanshan134/SimpleOrder/milestones)
+
 - `beta`：日常开发与试用分支，结构和功能可能变化。日常修改和功能 PR 以 `beta` 为目标。
 - `main`：稳定版本分支。`beta` 经过构建、自检及实际试用后，通过 PR 合并到 `main`，不直接把未验证的开发改动推入 `main`。
 - 两人同时开发时，从最新 `beta` 创建各自的 `feature/*` 或 `fix/*` 分支，再提交 PR 合并回 `beta`，避免共同推送同一功能分支。

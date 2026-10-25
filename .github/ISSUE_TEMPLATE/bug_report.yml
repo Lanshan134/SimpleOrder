@@ -1,0 +1,40 @@
+name: 缺陷反馈
+description: 报告已有功能的异常
+title: "[Bug] "
+labels: ["type:bug", "status:discussion"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 程序版本与系统
+    validations:
+      required: true
+  - type: input
+    id: window
+    attributes:
+      label: 出现问题的窗口
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图或日志（可选）
+      description: 请隐藏私人任务，不要上传个人数据库或凭据。
