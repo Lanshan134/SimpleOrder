@@ -21,6 +21,53 @@ bool overlaps(const QList<Token> &tokens, const Token &candidate) {
             return true;
     return false;
 }
+int entryNumber(const QString &value, bool digitSequence = false) {
+    if (QRegularExpression("^[0-9]+$").match(value).hasMatch()) {
+        bool ok = false;
+        int result = value.toInt(&ok);
+        return ok ? result : -1;
+    }
+    const QString digits = "零一二三四五六七八九";
+    QString text = value;
+    text.replace("〇", "零");
+    text.replace("两", "二");
+    if (!QRegularExpression("^[零一二三四五六七八九十百千]+$").match(text).hasMatch())
+        return -1;
+    if (!text.contains(QRegularExpression("[十百千]"))) {
+        if (text.size() > 1 && !digitSequence && !text.startsWith("零"))
+            return -1;
+        int result = 0;
+        for (auto ch : text) {
+            result = result * 10 + digits.indexOf(ch);
+            if (result > 9999)
+                return -1;
+        }
+        return result;
+    }
+    int total = 0, current = -1, lastUnit = 10000;
+    for (auto ch : text) {
+        int digit = digits.indexOf(ch);
+        if (digit >= 0) {
+            if (digit == 0) {
+                if (current > 0)
+                    return -1;
+                current = 0;
+            } else {
+                if (current > 0)
+                    return -1;
+                current = digit;
+            }
+        } else {
+            int unit = ch == QChar(0x5341) ? 10 : ch == QChar(0x767e) ? 100 : 1000;
+            if (unit >= lastUnit || current == 0 || (current < 0 && unit != 10))
+                return -1;
+            total += (current < 0 ? 1 : current) * unit;
+            current = -1;
+            lastUnit = unit;
+        }
+    }
+    return total + qMax(0, current);
+}
 QDate nextAnnual(int month, int day, const QDate &today) {
     for (int year = today.year(); year <= qMin(9999, today.year() + 8); ++year) {
         QDate date(year, month, day);
@@ -46,17 +93,18 @@ ParsedEntry parseEntry(const QString &source, const QDate &today) {
             if (!overlaps(dates, t))
                 dates << t;
     };
+    const QString digits = "0-9零〇一二两三四五六七八九十百千";
+    const QString number = "[" + digits + "]{1,12}";
+    const QString left = "(?<![" + digits + "A-Za-z:第])";
+    const QString right = "(?![" + digits + ":])";
     addDates(R"((?<![0-9A-Za-z])\d{4}[-/]\d{1,2}[-/]\d{1,2}(?![0-9/-]))");
-    addDates(R"((?<![0-9A-Za-z])(?:\d{4}年)?\d{1,2}月\d{1,2}(?:日|号)?(?![0-9]))");
+    addDates(left + "(?:" + number + "年)?" + number + "月" + number + "(?:日|号)?" + right);
     addDates(R"((?<![0-9A-Za-z/-])\d{1,2}/\d{1,2}(?![0-9/-]))");
     addDates(R"((?:本周|下周|周|星期)[一二三四五六日天])");
-    addDates(R"(今天|明天|后天|(?<![0-9A-Za-z])\d{1,4}天后)");
-    auto times =
-        tokens(text, R"((?<![0-9A-Za-z:])(?:(?:上午|下午|晚上|中午|凌晨|早上))?\d{1,2}:\d{2}(?![0-9:]))");
-    for (
-        auto t : tokens(
-            text,
-            R"((?<![0-9A-Za-z:])(?:(?:上午|下午|晚上|中午|凌晨|早上))?\d{1,2}点(?:半|\d{1,2}分?)?(?![0-9]))"))
+    addDates("今天|明天|后天|" + left + number + "天后");
+    const QString period = "(?:(?:上午|下午|晚上|中午|凌晨|早上))?";
+    auto times = tokens(text, left + period + number + ":" + number + right);
+    for (auto t : tokens(text, left + period + number + "点(?:半|" + number + "分?)?" + right))
         if (!overlaps(times, t))
             times << t;
     for (const auto &t : dates)
@@ -75,9 +123,11 @@ ParsedEntry parseEntry(const QString &source, const QDate &today) {
             out.date = today.addDays(1);
         else if (value == "后天")
             out.date = today.addDays(2);
-        else if (value.endsWith("天后"))
-            out.date = today.addDays(value.left(value.size() - 2).toInt());
-        else if (value.contains("周") || value.contains("星期")) {
+        else if (value.endsWith("天后")) {
+            int days = entryNumber(value.left(value.size() - 2));
+            if (days >= 0 && days <= 9999)
+                out.date = today.addDays(days);
+        } else if (value.contains("周") || value.contains("星期")) {
             auto day = QString("一二三四五六日").indexOf(value.right(1)) + 1;
             if (value.endsWith("天"))
                 day = 7;
@@ -88,23 +138,22 @@ ParsedEntry parseEntry(const QString &source, const QDate &today) {
             else
                 out.date = today.addDays((day - today.dayOfWeek() + 7) % 7);
         } else {
-            auto parts = value.split(QRegularExpression("[^0-9]+"), Qt::SkipEmptyParts);
+            auto parts = value.split(QRegularExpression("[^" + digits + "]+"), Qt::SkipEmptyParts);
             if (parts.size() == 3)
-                out.date = QDate(parts[0].toInt(), parts[1].toInt(), parts[2].toInt());
+                out.date = QDate(entryNumber(parts[0], true), entryNumber(parts[1]), entryNumber(parts[2]));
             else if (parts.size() == 2)
-                out.date = nextAnnual(parts[0].toInt(), parts[1].toInt(), today);
+                out.date = nextAnnual(entryNumber(parts[0]), entryNumber(parts[1]), today);
         }
-        if (!out.date.isValid()) {
+        if (!out.date.isValid() || out.date.year() < 1 || out.date.year() > 9999) {
             out.error = "日期无效，请检查年月日";
             return out;
         }
     }
     if (!times.isEmpty()) {
         const auto value = times.first().value;
-        auto numbers = value.split(QRegularExpression("[^0-9]+"), Qt::SkipEmptyParts);
-        int hour = numbers[0].toInt(), minute = numbers.size() == 2    ? numbers[1].toInt()
-                                                : value.endsWith("半") ? 30
-                                                                       : 0;
+        auto numbers = value.split(QRegularExpression("[^" + digits + "]+"), Qt::SkipEmptyParts);
+        int hour = entryNumber(numbers[0]);
+        int minute = numbers.size() == 2 ? entryNumber(numbers[1]) : value.endsWith("半") ? 30 : 0;
         const bool period = QRegularExpression("^(上午|下午|晚上|中午|凌晨|早上)").match(value).hasMatch();
         if (period && hour > 12) {
             out.error = "带上午或下午的时间请使用 0–12 点";
@@ -251,6 +300,21 @@ void smartEntryParserTests() {
     check(!parseEntry("开会 8:00 9:00", day).error.isEmpty(), "multiple times rejected");
     check(!parseEntry("明天 18:00", day).error.isEmpty(), "missing title rejected");
     check(parseEntry("开会 18:00:30", day).spans.isEmpty(), "unsupported seconds not partially extracted");
+    check(parseEntry("下午三点开会", day).time == QTime(15, 0) &&
+              parseEntry("下午三点开会", day).title == "开会",
+          "Chinese hour");
+    check(parseEntry("三点半开会", day).time == QTime(3, 30), "Chinese half hour");
+    check(parseEntry("开会 十五点二十分", day).time == QTime(15, 20), "Chinese hour and minute units");
+    check(parseEntry("三天后开会", day).date == day.addDays(3), "Chinese relative date");
+    check(parseEntry("十一月二十五日开会", day).date == QDate(2027, 11, 25), "Chinese month and day");
+    check(parseEntry("二〇二八年二月二十九日开会", day).date == QDate(2028, 2, 29),
+          "Chinese digit year and leap date");
+    check(parseEntry("下午两点零五分开会", day).time == QTime(14, 5), "Chinese liang and leading zero");
+    check(!parseEntry("二十五点开会", day).error.isEmpty(), "invalid Chinese hour");
+    check(!parseEntry("三点六十分开会", day).error.isEmpty(), "invalid Chinese minute");
+    check(!parseEntry("四月三十一日开会", day).error.isEmpty(), "invalid Chinese day");
+    check(parseEntry("学习第三点 项目三", day).spans.isEmpty(), "ordinary Chinese numerals retained");
+    check(!parseEntry("九九九九九九年三月三日开会", day).error.isEmpty(), "oversized Chinese year rejected");
     check(parseEntry("买菜", day).title == "买菜" && parseEntry("买菜", day).spans.isEmpty(),
           "plain title unchanged");
 }

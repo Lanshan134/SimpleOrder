@@ -2521,7 +2521,7 @@ void Controller::smartEntrySmokeTest(const QString &directory) {
     enter(quick);
     check(store.all().size() == before && !quick->toPlainText().isEmpty(),
           "ambiguous quick entry not created");
-    quick->setPlainText("准备 明天 下午3点");
+    quick->setPlainText("准备 明天 下午三点");
     check(quick->extraSelections().size() == 2 && quick->toolTip().contains("15:00"),
           "recognized spans highlighted with resolved preview");
     quick->grab().save(directory + "/smart-entry-preview.png");
