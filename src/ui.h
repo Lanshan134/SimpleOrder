@@ -1,5 +1,6 @@
 #pragma once
 #include "planeditor.h"
+#include "smartentry.h"
 #include "store.h"
 #include <QtWidgets>
 #include <functional>
@@ -100,6 +101,9 @@ class Controller : public QObject {
     QPlainTextEdit *notes = nullptr;
     QTabBar *editorTabs = nullptr;
     QJsonObject editorBaseline;
+    bool dateManuallyEdited = false;
+    bool parseEditorTitle();
+    void smartEntrySmokeTest(const QString &);
     bool dateFieldActive = false, calendarDateEditPending = false;
     int dateFocusGeneration = 0;
     bool eventFilter(QObject *, QEvent *) override;
@@ -138,7 +142,7 @@ class Controller : public QObject {
     bool saveEditor();
     void complete(qint64, QDate occurrence = {});
     void schedule(qint64, QDate);
-    void add(const QString &, QDate = {});
+    bool add(const QString &, QDate = {});
     void settingsDialog();
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);
