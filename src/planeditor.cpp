@@ -108,16 +108,18 @@ PlanEditor::PlanEditor(QWidget *parent) : QWidget(parent) {
     end = new QLineEdit;
     clock = new QLineEdit;
     for (auto date : {start, end}) {
-        date->setPlaceholderText("不限（YYYY-MM-DD）");
+        date->setPlaceholderText("不限");
+        date->setToolTip("YYYY-MM-DD；留空表示不限。");
         date->setClearButtonEnabled(true);
     }
     startPages = new QStackedWidget;
     startPages->addWidget(editorField("开始日期", start));
     startPages->addWidget(editorField("首次日期（必填）", first));
     root->addWidget(new EditorRow(startPages, editorField("结束日期", end)));
-    clock->setPlaceholderText("HH:mm（留空表示不指定）");
+    clock->setPlaceholderText("不指定");
+    clock->setToolTip("HH:mm；可留空，仅作记录。");
     clock->setClearButtonEnabled(true);
-    clockBox = new EditorRow(editorField("时间（可选）", clock), nullptr);
+    clockBox = new EditorRow(editorField("时间", clock), nullptr);
     root->addWidget(clockBox);
     dateHint = new QLabel;
     dateHint->setWordWrap(true);
@@ -263,9 +265,11 @@ void PlanEditor::updateView() {
         }
         if (k != "total" && !clock->text().trimmed().isEmpty())
             text += " · " + clock->text().trimmed();
-        preview->setText(text);
-        preview->setToolTip(dateHint->text());
+        ruleType->setToolTip(text + "\n" + dateHint->text());
+        preview->clear();
+        preview->hide();
     } catch (const std::exception &e) {
         preview->setText(QString::fromUtf8(e.what()));
+        preview->show();
     }
 }

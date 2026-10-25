@@ -553,7 +553,7 @@ void Controller::buildFloating() {
     bindList(tasks);
     lv->addWidget(tasks);
     section("计划", plans, planMore);
-    lv->addWidget(quickBar("添加事项（默认无日期）", [this](QString t) { guard([&] { add(t); }); }));
+    lv->addWidget(quickBar("添加事项", [this](QString t) { guard([&] { add(t); }); }));
     auto listScroll = new QScrollArea;
     listScroll->setObjectName("floatingScroll");
     listScroll->setFrameShape(QFrame::NoFrame);
@@ -710,7 +710,7 @@ void Controller::buildManager() {
     auto left = new QFrame;
     left->setObjectName("subpanel");
     auto lv = new QVBoxLayout(left);
-    lv->addWidget(heading("全部事项 · 点击编辑，拖动改期"));
+    lv->addWidget(heading("全部事项"));
     search = new QLineEdit;
     search->setPlaceholderText("搜索事项…");
     lv->addWidget(search);
@@ -723,9 +723,10 @@ void Controller::buildManager() {
         updateLists();
     });
     all = new TaskList;
+    all->setToolTip("点击编辑；拖到日历改期。Enter 编辑，空格完成或记录进度。");
     bindList(all);
     lv->addWidget(all, 1);
-    lv->addWidget(quickBar("新建 Task（无日期）", [this](QString t) { guard([&] { add(t); }); }));
+    lv->addWidget(quickBar("新建任务", [this](QString t) { guard([&] { add(t); }); }));
     split->addWidget(left);
     auto right = new QFrame;
     right->setObjectName("subpanel");
@@ -778,9 +779,11 @@ void Controller::buildManager() {
     title->setMaxLength(200);
     date = new QLineEdit;
     date->installEventFilter(this);
-    date->setPlaceholderText("YYYY-MM-DD（可清空）");
+    date->setPlaceholderText("YYYY-MM-DD");
+    date->setToolTip("可清空；先激活此框，再点击日历改期。");
     time = new QLineEdit;
-    time->setPlaceholderText("HH:mm（可清空）");
+    time->setPlaceholderText("HH:mm");
+    time->setToolTip("可清空；时间仅作记录，不发送提醒。");
     group = new QComboBox;
     for (auto c : store.categories())
         group->addItem(c.name, c.id);
@@ -796,8 +799,8 @@ void Controller::buildManager() {
     planEditor = new PlanEditor;
     typeRuleRow = new EditorRow(editorField("类型", group), editorField("计划规则", planEditor->selector()));
     form->addWidget(typeRuleRow);
-    taskDateBox = editorField("日期（可选）", date);
-    taskTimeBox = editorField("时间（可选，仅记录）", time);
+    taskDateBox = editorField("日期", date);
+    taskTimeBox = editorField("时间", time);
     auto taskDates = new EditorRow(taskDateBox, taskTimeBox);
     form->addWidget(taskDates);
     date->setClearButtonEnabled(true);
@@ -833,7 +836,8 @@ void Controller::buildManager() {
     rv->addLayout(actions);
     split->addWidget(right);
     split->setSizes({370, 600});
-    status = new QLabel("事项保存在本机 SQLite · 从左侧拖动事项到日历可改期");
+    status = new QLabel;
+    status->hide();
     status->setObjectName("hint");
     root->addWidget(status);
     connect(search, &QLineEdit::textChanged, this, [this] { updateLists(); });
@@ -891,7 +895,8 @@ void Controller::buildManager() {
     auto changed = [this] {
         if (!refreshing) {
             dirty = hasEditorChanges();
-            status->setText(dirty ? "草稿暂存中 · 点击保存后写入事项" : "内容未改变");
+            status->setText("未保存");
+            status->setVisible(dirty);
         }
     };
     for (auto w : {title, date, time})
@@ -1078,9 +1083,8 @@ void Controller::refresh() {
     updateLists();
     if (!dirty || !hasEditorChanges())
         fillEditor();
-    status->setText(settingsPreview      ? "设置预览中 · 可移动窗口、展开和浏览，事项暂不可编辑"
-                    : hasEditorChanges() ? "草稿暂存中 · 点击保存后写入事项"
-                                         : "已保存 · 本机 SQLite · 拖动事项到日历可改期");
+    status->setText(settingsPreview ? "设置预览（只读）" : "未保存");
+    status->setVisible(settingsPreview || hasEditorChanges());
 }
 bool Controller::saveEditor() {
     if (settingsPreview)
@@ -1410,8 +1414,8 @@ void Controller::setSettingsPreview(bool enabled) {
     saveButton->setEnabled(!enabled);
     deleteButton->setEnabled(!enabled);
     manager->findChild<QPushButton *>("addDateItem")->setEnabled(!enabled);
-    status->setText(enabled ? "设置预览中 · 可移动窗口、展开和浏览，事项暂不可编辑"
-                            : "设置已关闭 · 可以继续编辑事项");
+    status->setText(enabled ? "设置预览（只读）" : "未保存");
+    status->setVisible(enabled || hasEditorChanges());
 }
 bool Controller::smokeTest(const QString &dir) {
     auto require = [](bool ok, const char *label) {
