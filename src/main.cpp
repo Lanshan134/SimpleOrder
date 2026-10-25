@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     const auto existingDataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     app.setApplicationName("SimpleOrder");
     app.setApplicationDisplayName("简序 · SimpleOrder");
-    app.setApplicationVersion("0.3.0-beta.1");
+    app.setApplicationVersion("0.3.0-beta.2");
     app.setFont(QFont("Microsoft YaHei UI", 11));
     QFile style(QCoreApplication::applicationDirPath() + "/style.qss");
     if (style.open(QIODevice::ReadOnly))

@@ -2,18 +2,18 @@
 
 桌面一角，井然有序。
 
-Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.3.0-beta.1 试用版；本地 `outputs/` 中旧安装包不代表最新源码。
+Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.3.0-beta.2 试用版；本地 `outputs/` 中旧安装包不代表最新源码。
 
 ## 下载试用版
 
-[下载 v0.3.0-beta.1 Windows x64 便携包](https://github.com/Lanshan134/SimpleOrder/releases/tag/v0.3.0-beta.1)。完整解压后运行 `SimpleOrder.exe`，不要单独移动 EXE。[版本说明](docs/release-v0.3.0-beta.1.md)。
+[下载 v0.3.0-beta.2 Windows x64 便携包](https://github.com/Lanshan134/SimpleOrder/releases/tag/v0.3.0-beta.2)。完整解压后运行 `SimpleOrder.exe`，不要单独移动 EXE。[版本说明](docs/release-v0.3.0-beta.2.md)。
 
 ## 分支与协作
 
 - `beta`：日常开发与试用分支，结构和功能可能变化。日常修改和功能 PR 以 `beta` 为目标。
 - `main`：稳定版本分支。`beta` 经过构建、自检及实际试用后，通过 PR 合并到 `main`，不直接把未验证的开发改动推入 `main`。
 - 两人同时开发时，从最新 `beta` 创建各自的 `feature/*` 或 `fix/*` 分支，再提交 PR 合并回 `beta`，避免共同推送同一功能分支。
-- 后续试用发布可使用 `v0.3.0-beta.1` 这样的版本标签；创建 `beta` 分支本身不表示已发布该版本。
+- 后续试用发布可使用 `v0.3.0-beta.2` 这样的版本标签；创建 `beta` 分支本身不表示已发布该版本。
 
 首次切换到远程开发分支：
 
