@@ -100,6 +100,7 @@ class RowDelegate : public QStyledItemDelegate {
 };
 QPushButton *button(const QString &text, const QString &name = {}) {
     auto b = new QPushButton(text);
+    b->setAutoDefault(false);
     if (!name.isEmpty())
         b->setObjectName(name);
     b->setCursor(Qt::PointingHandCursor);
@@ -111,29 +112,23 @@ QLabel *heading(const QString &s) {
     l->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     return l;
 }
-QWidget *quickBar(const QString &placeholder, const std::function<void(QString)> &add) {
+QWidget *quickBar(const QString &placeholder, const std::function<bool(QString)> &add) {
     auto w = new QWidget;
     w->setObjectName("quickAddBar");
     w->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     auto h = new QHBoxLayout(w);
     h->setContentsMargins(0, 6, 0, 0);
-    auto input = new QLineEdit;
-    input->setMaxLength(200);
+    auto input = new SmartEntry;
     input->setPlaceholderText(placeholder);
+    input->onSubmit(add);
     auto b = button("+", "primary");
     b->setAccessibleName("添加事项");
     h->addWidget(input);
     h->addWidget(b);
-    auto submit = [input, add] {
-        if (!input->text().trimmed().isEmpty()) {
-            add(input->text());
-            input->clear();
-        }
-    };
-    QObject::connect(b, &QPushButton::clicked, w, submit);
-    QObject::connect(input, &QLineEdit::returnPressed, w, submit);
+    QObject::connect(b, &QPushButton::clicked, input, [input] { input->submitEntry(); });
     return w;
 }
+
 } // namespace
 TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
     setItemDelegate(new RowDelegate(this));
@@ -553,7 +548,11 @@ void Controller::buildFloating() {
     bindList(tasks);
     lv->addWidget(tasks);
     section("计划", plans, planMore);
-    lv->addWidget(quickBar("添加事项（默认无日期）", [this](QString t) { guard([&] { add(t); }); }));
+    lv->addWidget(quickBar("添加事项（默认无日期）", [this](QString t) {
+        bool created = false;
+        guard([&] { created = add(t); });
+        return created;
+    }));
     auto listScroll = new QScrollArea;
     listScroll->setObjectName("floatingScroll");
     listScroll->setFrameShape(QFrame::NoFrame);
@@ -569,7 +568,11 @@ void Controller::buildFloating() {
     floatDay->setFixedHeight(4 * ROW_HEIGHT);
     bindList(floatDay);
     cv->addWidget(floatDay);
-    cv->addWidget(quickBar("添加到选中日期", [this](QString t) { guard([&] { add(t, day); }); }));
+    cv->addWidget(quickBar("添加到选中日期", [this](QString t) {
+        bool created = false;
+        guard([&] { created = add(t, day); });
+        return created;
+    }));
     stack->addWidget(calendarPage);
 
     connect(switchButton, &QPushButton::clicked, this, [this, label] {
@@ -665,6 +668,8 @@ void Controller::scaleFloating(bool force) {
         if (metrics.spacing >= 0)
             metrics.layout->setSpacing(px(metrics.spacing));
     }
+    for (auto input : floating->findChildren<SmartEntry *>())
+        input->setFixedHeight(px(36));
     const int row = scaled(floating, ROW_HEIGHT);
     tasks->setFixedHeight(settings.value("taskRows", 5).toInt() * row);
     floatDay->setFixedHeight(4 * row);
@@ -725,7 +730,11 @@ void Controller::buildManager() {
     all = new TaskList;
     bindList(all);
     lv->addWidget(all, 1);
-    lv->addWidget(quickBar("新建 Task（无日期）", [this](QString t) { guard([&] { add(t); }); }));
+    lv->addWidget(quickBar("新建 Task（无日期）", [this](QString t) {
+        bool created = false;
+        guard([&] { created = add(t); });
+        return created;
+    }));
     split->addWidget(left);
     auto right = new QFrame;
     right->setObjectName("subpanel");
@@ -775,7 +784,9 @@ void Controller::buildManager() {
     form->setSpacing(8);
 
     title = new QLineEdit;
-    title->setMaxLength(200);
+    title->setMaxLength(1000);
+    title->setToolTip("可输入名称与日期时间，按回车识别后再保存。");
+    connect(title, &QLineEdit::returnPressed, this, [this] { parseEditorTitle(); });
     date = new QLineEdit;
     date->installEventFilter(this);
     date->setPlaceholderText("YYYY-MM-DD（可清空）");
@@ -888,6 +899,7 @@ void Controller::buildManager() {
             refresh();
         });
     });
+    connect(date, &QLineEdit::textEdited, this, [this] { dateManuallyEdited = true; });
     auto changed = [this] {
         if (!refreshing) {
             dirty = hasEditorChanges();
@@ -1027,6 +1039,8 @@ bool Controller::eventFilter(QObject *watched, QEvent *event) {
 }
 void Controller::fillEditor() {
     refreshing = true;
+    dateManuallyEdited = false;
+    title->setProperty("entryError", QString());
     dateFieldActive = false;
     calendarDateEditPending = false;
     date->clearFocus();
@@ -1260,6 +1274,7 @@ void Controller::setDate(QDate d) {
         day = d;
         selectDay(d);
         date->setText(d.toString(Qt::ISODate));
+        dateManuallyEdited = true;
         date->clearFocus();
         updateLists();
         return;
@@ -1339,20 +1354,58 @@ void Controller::schedule(qint64 id, QDate d) {
             return;
         }
 }
-void Controller::add(const QString &t, QDate d) {
+bool Controller::add(const QString &t, QDate d) {
     if (settingsPreview)
-        return;
+        return false;
+    const auto parsed = parseEntry(t);
+    if (!parsed.error.isEmpty())
+        throw std::runtime_error(parsed.error.toUtf8().constData());
     if (!leaveEditor())
-        return;
+        return false;
+    if (parsed.date.isValid())
+        d = parsed.date;
+    else if (parsed.time.isValid() && !d.isValid())
+        d = QDate::currentDate();
     Item i;
-    i.title = t;
+    i.title = parsed.title;
     i.group = settings.value("defaultType", "other").toString();
-    i.showCalendar = settings.value("planDefaultCalendar", false).toBool();
     i.date = d.isValid() ? d.toString(Qt::ISODate) : QString();
+    i.time = parsed.time.isValid() ? parsed.time.toString("HH:mm") : QString();
     selected = store.save(i).id;
+    dirty = false;
     if (d.isValid())
         day = d;
     refresh();
+    return true;
+}
+bool Controller::parseEditorTitle() {
+    if (settingsPreview || type->currentData().toString() != "task")
+        return false;
+    const auto parsed = parseEntry(title->text());
+    QString error = parsed.error;
+    if (error.isEmpty() && parsed.date.isValid() && !date->text().trimmed().isEmpty() &&
+        date->text().trimmed() != parsed.date.toString(Qt::ISODate) && (selected || dateManuallyEdited))
+        error = "日期框已有值，请先清空日期框或移除名称中的日期";
+    if (error.isEmpty() && parsed.time.isValid() && !time->text().trimmed().isEmpty() &&
+        time->text().trimmed() != parsed.time.toString("HH:mm"))
+        error = "时间框已有值，请先清空时间框或移除名称中的时间";
+    title->setProperty("entryError", error);
+    if (!error.isEmpty()) {
+        QToolTip::showText(title->mapToGlobal(QPoint(0, title->height())), error, title);
+        return false;
+    }
+    QToolTip::hideText();
+    if (parsed.spans.isEmpty())
+        return false;
+    title->setText(parsed.title);
+    if (parsed.date.isValid())
+        date->setText(parsed.date.toString(Qt::ISODate));
+    if (parsed.time.isValid()) {
+        time->setText(parsed.time.toString("HH:mm"));
+        if (date->text().trimmed().isEmpty())
+            date->setText(day.toString(Qt::ISODate));
+    }
+    return true;
 }
 void Controller::setTop(bool top) {
     bool shown = floating->isVisible();
@@ -1729,6 +1782,8 @@ bool Controller::smokeTest(const QString &dir) {
     editorSmokeTest(dir);
     draftSmokeTest(dir);
     calendarEditorSmokeTest();
+    smartEntryParserTests();
+    smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
     return true;
 }
@@ -2386,4 +2441,142 @@ void Controller::calendarEditorSmokeTest() {
     fillEditor();
     clickDate(cal, b);
     require(!selected && !hasEditorChanges(), "clean existing view switches without any confirmation");
+}
+
+void Controller::smartEntrySmokeTest(const QString &directory) {
+    auto check = [](bool ok, const char *name) {
+        if (!ok)
+            throw std::runtime_error(name);
+    };
+    auto get = [&] {
+        for (auto i : store.all())
+            if (i.id == selected)
+                return i;
+        return Item{};
+    };
+    auto enter = [](QWidget *input) {
+        QKeyEvent event(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QApplication::sendEvent(input, &event);
+    };
+    dirty = false;
+    selected = 0;
+    fillEditor();
+    auto before = store.all().size();
+    title->setText("交报告 明天 18:00");
+    enter(title);
+    check(title->text() == "交报告" &&
+              date->text() == QDate::currentDate().addDays(1).toString(Qt::ISODate) &&
+              time->text() == "18:00" && !selected && store.all().size() == before && hasEditorChanges(),
+          "name Enter fills draft only");
+    saveEditor();
+    check(get().title == "交报告" && get().time == "18:00", "parsed form saves explicitly");
+    const auto previousDate = date->text(), previousTime = time->text();
+    title->setText("改期 后天 19:00");
+    enter(title);
+    check(!title->property("entryError").toString().isEmpty() && title->text() == "改期 后天 19:00" &&
+              date->text() == previousDate && time->text() == previousTime,
+          "conflict retains all form contents");
+    fillEditor();
+    dirty = false;
+    selected = 0;
+    fillEditor();
+    date->setText("2030-01-01");
+    dateManuallyEdited = true;
+    title->setText("开会 明天");
+    enter(title);
+    check(date->text() == "2030-01-01" && title->text() == "开会 明天",
+          "manually entered date not overwritten");
+    date->clear();
+    enter(title);
+    check(title->text() == "开会" && date->text() == QDate::currentDate().addDays(1).toString(Qt::ISODate),
+          "clear field resolves conflict");
+    dirty = false;
+    selected = 0;
+    fillEditor();
+    editorTabs->setCurrentIndex(1);
+    title->setText("计划 明天 18:00");
+    enter(title);
+    check(title->text() == "计划 明天 18:00" && planEditor->rule().value("end").toString().isEmpty(),
+          "plan name not parsed");
+    dirty = false;
+    selected = 0;
+    fillEditor();
+    auto quick = manager->findChild<SmartEntry *>();
+    check(quick, "manager quick input exists");
+    quick->setPlainText("买菜");
+    enter(quick);
+    check(quick->toPlainText().isEmpty() && get().title == "买菜" && get().date.isEmpty(),
+          "plain quick title keeps undated behavior");
+    quick->setPlainText("提醒 18:00");
+    enter(quick);
+    check(get().date == QDate::currentDate().toString(Qt::ISODate) && get().time == "18:00",
+          "time-only quick entry defaults today");
+    before = store.all().size();
+    quick->setPlainText("明天 18:00");
+    enter(quick);
+    check(!quick->toPlainText().isEmpty() && store.all().size() == before &&
+              !quick->property("entryError").toString().isEmpty(),
+          "invalid quick entry does not clear or create");
+    quick->setPlainText("会议 今天 明天");
+    enter(quick);
+    check(store.all().size() == before && !quick->toPlainText().isEmpty(),
+          "ambiguous quick entry not created");
+    quick->setPlainText("准备 明天 下午3点");
+    check(quick->extraSelections().size() == 2 && quick->toolTip().contains("15:00"),
+          "recognized spans highlighted with resolved preview");
+    quick->grab().save(directory + "/smart-entry-preview.png");
+    quick->setPlainText("输入法");
+    QInputMethodEvent preedit("ming", {});
+    QApplication::sendEvent(quick, &preedit);
+    enter(quick);
+    check(store.all().size() == before, "IME candidate Enter does not create task");
+    QInputMethodEvent committed;
+    committed.setCommitString("明");
+    QApplication::sendEvent(quick, &committed);
+    quick->clear();
+    quick->insertPlainText("交报告 明天");
+    quick->undo();
+    check(quick->toPlainText().isEmpty(), "highlight preserves undo");
+    quick->setPlainText("取消时保留 明天");
+    title->setText("已有表单未保存修改");
+    bool cancelled = false;
+    QTimer::singleShot(0, this, [&] {
+        if (auto box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+            cancelled = true;
+            box->button(QMessageBox::Cancel)->click();
+        }
+    });
+    enter(quick);
+    check(cancelled && quick->toPlainText() == "取消时保留 明天" && store.all().size() == before,
+          "cancelled quick creation retains text");
+    fillEditor();
+    quick->clear();
+    const auto chosen = QDate::currentDate().addDays(5);
+    selected = 0;
+    dirty = false;
+    fillEditor();
+    setDate(chosen);
+    auto floatInputs = floating->findChildren<SmartEntry *>();
+    check(floatInputs.size() == 2, "floating list and calendar smart inputs exist");
+    SmartEntry *calendarInput = nullptr;
+    for (auto input : floatInputs)
+        if (input->placeholderText() == "添加到选中日期")
+            calendarInput = input;
+    check(calendarInput, "calendar quick entry route found");
+    calendarInput->setPlainText("选中日期事项 08:30");
+    enter(calendarInput);
+    check(get().date == chosen.toString(Qt::ISODate) && get().time == "08:30",
+          "calendar quick entry uses selected date");
+    // Independent dialogs must not turn the name-field Enter into a save click.
+    before = store.all().size();
+    QTimer::singleShot(0, this, [&] {
+        title->setText("已有任务 18:00");
+        time->clear();
+        enter(title);
+        check(store.all().size() == before && hasEditorChanges(), "dialog Enter does not save");
+        if (itemWindow)
+            itemWindow->close();
+    });
+    editFloatingItem(selected);
+    fillEditor();
 }
