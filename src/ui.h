@@ -2,9 +2,16 @@
 #include "planeditor.h"
 #include "smartentry.h"
 #include "store.h"
+#include "theme.h"
 #include <QtWidgets>
 #include <functional>
 
+// Floating text opacity floor (percent); also clamps older settings files.
+constexpr int MIN_TEXT_OPACITY = 40;
+// Floating window sizes at 100% text; Windows text size enlarges them so scaled text still fits.
+inline QSize floatingSize(int width, int height) {
+    return QSize(qRound(width * theme::textScale), qRound(height * theme::textScale));
+}
 QColor groupColor(const QString &group);
 QString groupName(const QString &group);
 class SettingsDialog;
