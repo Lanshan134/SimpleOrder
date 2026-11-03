@@ -144,6 +144,7 @@ class Controller : public QObject {
     void schedule(qint64, QDate);
     bool add(const QString &, QDate = {});
     void settingsDialog();
+    void layoutSmokeTest(const QString &directory);
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);
