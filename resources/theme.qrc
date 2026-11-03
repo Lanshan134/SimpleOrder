@@ -1,0 +1,14 @@
+<!DOCTYPE RCC>
+<!-- Combo and spin arrows for style.qss; colours are the ink-control and ink-disabled tokens. -->
+<RCC version="1.0">
+    <qresource prefix="/theme">
+        <file>chevron-down.png</file>
+        <file>chevron-down@2x.png</file>
+        <file>chevron-down-disabled.png</file>
+        <file>chevron-down-disabled@2x.png</file>
+        <file>chevron-up.png</file>
+        <file>chevron-up@2x.png</file>
+        <file>chevron-up-disabled.png</file>
+        <file>chevron-up-disabled@2x.png</file>
+    </qresource>
+</RCC>

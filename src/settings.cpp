@@ -65,7 +65,7 @@ class TypeDelegate : public QStyledItemDelegate {
             return;
         }
         p->save();
-        p->fillRect(option.rect, option.state & QStyle::State_Selected ? QColor("#dce8f6") : Qt::white);
+        p->fillRect(option.rect, theme::color(option.state & QStyle::State_Selected ? "selection" : "surface"));
         p->setRenderHint(QPainter::Antialiasing);
         p->setPen(Qt::NoPen);
         p->setBrush(QColor(index.data(Qt::UserRole + 1).toString()));
@@ -88,14 +88,15 @@ class ToggleSwitch : public QCheckBox {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
-        p.setBrush(isEnabled() ? (isChecked() ? QColor("#557da9") : QColor("#cbd5e2")) : QColor("#e4e8ee"));
-        p.drawRoundedRect(QRectF(1, 2, 36, 20), 10, 10);
+        // The off track needs 3:1 against white to read as a control.
+        p.setBrush(theme::color(isEnabled() ? (isChecked() ? "accent" : "control-border") : "control-off"));
+        p.drawRoundedRect(QRectF(2, 3, 34, 18), 9, 9);
         p.setBrush(Qt::white);
-        p.drawEllipse(QRectF(isChecked() ? 19 : 3, 4, 16, 16));
+        p.drawEllipse(QRectF(isChecked() ? 19 : 5, 5, 14, 14));
         if (hasFocus()) {
-            p.setPen(QPen(QColor("#8ca9cd"), 1));
+            p.setPen(QPen(theme::color("focus"), 2));
             p.setBrush(Qt::NoBrush);
-            p.drawRoundedRect(QRectF(.5, .5, 37, 23), 11, 11);
+            p.drawRoundedRect(QRectF(1, 1, 36, 22), 11, 11);
         }
     }
 };
@@ -135,17 +136,21 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
     setMinimumSize(760, 560);
     if (c.testing)
         setAttribute(Qt::WA_DontShowOnScreen);
-    setStyleSheet(
-        "QDialog#settingsDialog {background:#f3f6fa;} QListWidget#settingsNavigation "
-        "{background:#edf2f8;border:0;font-size:15px;} QListWidget#settingsNavigation::item {padding:12px "
-        "15px;border-radius:7px;} QListWidget#settingsNavigation::item:selected "
-        "{background:#dbe7f5;color:#315f9b;} QLabel#settingsPageTitle {font-size:22px;font-weight:600;} "
-        "QLabel#settingsHint {font-size:12px;color:#7b8797;} QGroupBox {background:white;border:1px solid "
-        "#e1e7f0;border-radius:10px;margin-top:14px;padding:14px 12px 10px;} QGroupBox::title "
-        "{subcontrol-origin:margin;left:13px;padding:0 4px;color:#60748e;font-size:13px;} QPushButton#danger "
-        "{color:#b65353;} QTableWidget {background:white;border:1px solid "
-        "#e1e7f0;border-radius:8px;gridline-color:#edf1f7;} QHeaderView::section "
-        "{background:#edf2f8;border:0;padding:8px;color:#72839a;}");
+    setStyleSheet(theme::style(
+        "QDialog#settingsDialog {background:@panel;}"
+        "QStackedWidget QScrollArea > QWidget > QWidget {background:transparent;}"
+        "QListWidget#settingsNavigation {background:@tint;border:0;font-size:15px;}"
+        "QListWidget#settingsNavigation::item {padding:12px 15px;border-radius:7px;}"
+        "QListWidget#settingsNavigation::item:selected {background:@selection;color:@accent-ink;}"
+        "QListWidget#settingsNavigation::item:focus {border:2px solid @focus;padding:10px 13px;}"
+        "QLabel#settingsPageTitle {font-size:22px;font-weight:600;}"
+        "QLabel#settingsHint {font-size:12px;color:@ink-muted;}"
+        "QGroupBox {background:@surface;border:1px solid @line;border-radius:10px;margin-top:14px;"
+        "padding:14px 12px 10px;}"
+        "QGroupBox::title {subcontrol-origin:margin;left:13px;padding:0 4px;color:@ink-group;font-size:13px;}"
+        "QPushButton#danger {color:@danger;}"
+        "QTableWidget {background:@surface;border:1px solid @line;border-radius:8px;gridline-color:@tint;}"
+        "QHeaderView::section {background:@tint;border:0;padding:8px;color:@ink-muted;}"));
     auto root = new QHBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
     root->setSpacing(16);
@@ -162,7 +167,8 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
     pages = new QStackedWidget;
     right->addWidget(pages, 1);
     auto footer = new QHBoxLayout;
-    saved = hint("普通选项即时生效并自动保存");
+    saved = hint("");
+    saved->setToolTip("设置即时生效并自动保存。");
     footer->addWidget(saved, 1);
     reset = action("恢复本页默认值");
     auto close = action("关闭");
@@ -201,7 +207,7 @@ QWidget *SettingsDialog::page(const QString &title, const QString &description) 
     auto label = new QLabel(title);
     label->setObjectName("settingsPageTitle");
     layout->addWidget(label);
-    layout->addWidget(hint(description));
+    label->setToolTip(description);
     layout->addStretch();
     auto scroll = new QScrollArea;
     scroll->setFrameShape(QFrame::NoFrame);
@@ -293,6 +299,7 @@ void SettingsDialog::floatingPage() {
         slider->setObjectName("setting_" + key);
         slider->setRange(minimum, 100);
         slider->setValue(c.settings.value(key, 100).toInt());
+        slider->setAccessibleName(label);
         auto value = new QLabel(QString::number(slider->value()) + "%");
         row->addWidget(slider, 1);
         row->addWidget(value);
@@ -308,11 +315,12 @@ void SettingsDialog::floatingPage() {
         });
     };
     opacityControl("opacity", "窗口背景不透明度", 0);
-    opacityControl("textOpacity", "文字不透明度", 0);
+    // Below this the floating text, including the way back into settings, stops being legible.
+    opacityControl("textOpacity", "文字不透明度", MIN_TEXT_OPACITY);
     auto layout = section(p, "文字与布局");
     number(layout, "基础字号", "fontSize", 12, 22, 15, " px");
     toggle(layout, "随窗口大小缩放", "scaleWithWindow", true);
-    number(layout, "Task 可见行数", "taskRows", 3, 12, 5, " 行");
+    number(layout, "任务可见行数", "taskRows", 3, 12, 5, " 行");
     number(layout, "置顶默认显示", "pinRows", 1, 6, 2, " 行");
     number(layout, "计划默认显示", "planRows", 1, 6, 2, " 行");
     auto display = section(p, "启动显示与位置");
@@ -321,7 +329,7 @@ void SettingsDialog::floatingPage() {
     auto restore = action("恢复悬浮窗大小与位置");
     display->addRow(restore);
     connect(restore, &QPushButton::clicked, this, [this] {
-        c.floating->resize(420, 480);
+        c.floating->resize(floatingSize(420, 480));
         c.floating->move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(40, 60));
         c.persistGeometry();
         saved->setText("已恢复悬浮窗位置与大小");
@@ -404,6 +412,7 @@ void SettingsDialog::populateTypes() {
         auto color = new QTableWidgetItem;
         color->setData(Qt::UserRole + 1, cat.color);
         color->setToolTip("选中该行后再次点击修改颜色");
+        color->setData(Qt::AccessibleTextRole, "颜色 " + cat.color);
         types->setItem(row, 0, color);
         auto name = new QTableWidgetItem(cat.name);
         name->setData(Qt::UserRole, cat.id);
@@ -412,6 +421,7 @@ void SettingsDialog::populateTypes() {
         types->setItem(row, 1, name);
         auto more = new QTableWidgetItem("⋯");
         more->setTextAlignment(Qt::AlignCenter);
+        more->setData(Qt::AccessibleTextRole, "更多操作");
         more->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         types->setItem(row, 2, more);
         color->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
@@ -428,6 +438,7 @@ void SettingsDialog::addType() {
     types->setRowHeight(row, 44);
     auto color = new QTableWidgetItem;
     color->setData(Qt::UserRole + 1, "#6b97c6");
+    color->setData(Qt::AccessibleTextRole, "颜色 #6b97c6");
     color->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     types->setItem(row, 0, color);
     auto name = new QTableWidgetItem;
@@ -436,6 +447,7 @@ void SettingsDialog::addType() {
     types->setItem(row, 1, name);
     auto more = new QTableWidgetItem("⋯");
     more->setTextAlignment(Qt::AlignCenter);
+    more->setData(Qt::AccessibleTextRole, "更多操作");
     more->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     types->setItem(row, 2, more);
     types->setCurrentCell(row, 1);
@@ -522,6 +534,7 @@ void SettingsDialog::chooseTypeColor(const QString &id) {
                     break;
                 }
             types->item(row, 0)->setData(Qt::UserRole + 1, color);
+            types->item(row, 0)->setData(Qt::AccessibleTextRole, "颜色 " + color);
             saved->setText("颜色已保存");
         });
     });
@@ -596,7 +609,7 @@ void SettingsDialog::displayPage() {
     toggle(done, "显示近期已完成事项", "showCompleted", true);
     choices(done, "完成后保留", "retentionHours",
             {{"立即隐藏", 0}, {"1 天", 24}, {"2 天", 48}, {"3 天", 72}, {"7 天", 168}, {"一直显示", -1}}, 48);
-    done->addRow(hint("已完成事项保持淡化、删除线并排列到末尾；历史入口始终保留。"));
+    done->parentWidget()->setToolTip("已完成事项淡化、加删除线并排到末尾；历史记录保留。");
     auto order = section(p, "排列方式");
     auto sorting =
         choices(order, "未完成事项排序", "sortMode",
@@ -625,7 +638,7 @@ void SettingsDialog::calendarPage() {
     auto content = section(p, "事项标记");
     toggle(content, "显示近期已完成标记", "calendarCompleted", true);
     toggle(content, "新计划默认在日历显示", "planDefaultCalendar", false);
-    content->addRow(hint("计划还需填写具体日期；超出每日标记数量的事项以 +N 显示。"));
+    content->parentWidget()->setToolTip("显示已启用日历的计划执行日，超出每日标记数量以 +N 显示。");
 }
 void SettingsDialog::startupPage() {
     auto p = page("启动与操作", "控制启动界面和窗口关闭方式。");
@@ -669,9 +682,7 @@ void SettingsDialog::startupPage() {
     auto close = section(p, "关闭行为");
     choices(close, "点击窗口关闭按钮时", "closeBehavior",
             {{"切换到另一个窗口", "switch"}, {"隐藏到系统托盘", "tray"}, {"退出程序", "exit"}}, "switch");
-    close->addRow(hint("系统托盘不可用时，自动切换到另一个窗口，避免找不到程序。"));
-    auto keys = section(p, "键盘操作");
-    keys->addRow(hint("列表内：Enter 编辑事项，空格完成或记录进度。全局快捷键将在后续版本提供。"));
+    close->parentWidget()->setToolTip("系统托盘不可用时，切换到另一个窗口。");
 }
 void SettingsDialog::dataPage() {
     auto p = page("数据与备份", "备份包含事项、完成时间和类型配置。导入前会保留原数据备份。");
@@ -755,7 +766,7 @@ void SettingsDialog::dataPage() {
             saved->setText("备份已保存");
         });
     });
-    automatic->addRow(hint("只清理本程序生成的自动备份，手动导出的备份不受保留数量影响。"));
+    automatic->parentWidget()->setToolTip("保留数量只作用于自动备份，不清理手动导出的备份。");
     auto danger = section(p, "清空事项");
     auto clear = action("清空全部事项…");
     clear->setObjectName("danger");
@@ -811,8 +822,9 @@ void SettingsDialog::aboutPage() {
     auto p = page("关于与帮助", "简序 · SimpleOrder · 个人任务管理器");
     auto about = section(p, "当前版本");
     about->addRow("版本", new QLabel(QCoreApplication::applicationVersion() + " · 源码开发版"));
-    about->addRow(hint("设置即时保存；只影响当前页面的恢复默认值不会重置其他设置。"));
+    about->parentWidget()->setToolTip("设置即时保存；恢复本页默认值不影响其他页面。");
     auto help = section(p, "常用操作");
+    help->addRow(hint("列表内：Enter 编辑事项，空格完成或记录进度。"));
     help->addRow(hint("• 拖动悬浮窗标题移动，拖动右下角调整大小。\n• "
                       "点击事项名称编辑，右键可置顶或取消置顶。\n• 选中日期后，在右侧表单填写详细新事项。\n• "
                       "对号记录完成；计划按目标次数累计。\n• 修改详情后请保存，再切换事项。"));
@@ -1111,7 +1123,7 @@ bool Controller::settingsSmokeTest(const QString &directory) {
     scaling->setChecked(false);
     floating->resize(630, 720);
     QApplication::processEvents();
-    require(tasks->font().pixelSize() == 20 && tasks->height() == 320,
+    require(tasks->font().pixelSize() == 20 && tasks->maximumHeight() == 320 && tasks->height() <= 320,
             "settings change floating font and visible rows");
     // Resetting only the floating page leaves unrelated preferences untouched.
     settings.setValue("retentionHours", 72);
