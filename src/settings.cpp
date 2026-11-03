@@ -328,7 +328,7 @@ void SettingsDialog::floatingPage() {
     auto restore = action("恢复悬浮窗大小与位置");
     display->addRow(restore);
     connect(restore, &QPushButton::clicked, this, [this] {
-        c.floating->resize(420, 480);
+        c.floating->resize(floatingSize(420, 480));
         c.floating->move(QGuiApplication::primaryScreen()->availableGeometry().topLeft() + QPoint(40, 60));
         c.persistGeometry();
         saved->setText("已恢复悬浮窗位置与大小");

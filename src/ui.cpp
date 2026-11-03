@@ -536,11 +536,10 @@ void Controller::buildFloating() {
                           Qt::WindowTitleHint);
     floating->setObjectName("floatingWindow");
     floating->setWindowTitle("简序 · 悬浮窗");
-    floating->resize(420, 480);
+    floating->resize(floatingSize(420, 480));
     floating->customSurface = true;
     floating->setAttribute(Qt::WA_TranslucentBackground);
-    floating->setMinimumWidth(390);
-    floating->setMinimumHeight(340);
+    floating->setMinimumSize(floatingSize(390, 340));
     auto grip = new QSizeGrip(floating);
     grip->setFixedSize(16, 16);
     grip->setToolTip("拖动调整悬浮窗大小");
@@ -602,6 +601,7 @@ void Controller::buildFloating() {
     listScroll->setObjectName("floatingScroll");
     listScroll->setFrameShape(QFrame::NoFrame);
     listScroll->setWidgetResizable(true);
+    listScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     listScroll->setWidget(listPage);
     stack->addWidget(listScroll);
     auto calendarPage = new QWidget;
@@ -666,12 +666,13 @@ void Controller::scaleFloating(bool force) {
         return;
     // The area-derived factor responds to either resize axis and applies uniformly
     // to text and geometry. Always scale from the original metrics, never cumulatively.
+    // Windows text size enlarges the default window, so with window scaling the size carries it.
+    const qreal font = settings.value("fontSize", 15).toDouble() / 15.0;
     const qreal factor =
         qBound(0.7,
-               theme::textScale * settings.value("fontSize", 15).toDouble() / 15.0 *
-                   (settings.value("scaleWithWindow", true).toBool()
-                        ? qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0))
-                        : 1.0),
+               settings.value("scaleWithWindow", true).toBool()
+                   ? font * qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0))
+                   : font * theme::textScale,
                3.0);
     if (!force && qAbs(factor - floatingScale) < 0.005)
         return;
@@ -1470,6 +1471,53 @@ bool Controller::smokeTest(const QString &dir) {
     require(tasks->sizeHintForRow(0) == baseRow && tasks->font().pixelSize() == baseFont &&
                 floating->layout()->contentsMargins().left() == 12,
             "no cumulative scale drift");
+    // Outside tests a drag's resize steps are coalesced and only the final size is applied.
+    testing = false;
+    for (int width : {470, 520, 570, 630}) {
+        floating->resize(width, width * 720 / 630);
+        QApplication::processEvents();
+    }
+    const bool deferred = qAbs(floatingScale - 1.0) < .01;
+    QElapsedTimer waited;
+    waited.start();
+    while (qAbs(floatingScale - 1.5) >= .01 && waited.elapsed() < 2000)
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+    testing = true;
+    require(deferred && qAbs(floatingScale - 1.5) < .01, "drag resize is debounced to its final size");
+    floating->resize(420, 480);
+    QApplication::processEvents();
+    // Windows text size: tests ignore the machine's setting, so apply an explicit 150%.
+    require(theme::scaleText("a{font-size:15px;padding:5px}", 1.5) == "a{font-size:23px;padding:5px}",
+            "text scale rewrites font sizes only");
+    const auto appStyle = qApp->styleSheet();
+    theme::textScale = 1.5;
+    qApp->setStyleSheet(theme::scaleText(theme::baseStyle));
+    manager->setProperty("uiScale", theme::textScale);
+    floating->resize(floatingSize(420, 480));
+    updateLists();
+    QApplication::processEvents();
+    int itemRow = 0;
+    while (itemRow < all->count() && !all->item(itemRow)->data(Qt::UserRole).toLongLong())
+        ++itemRow;
+    require(all->font().pixelSize() == 23 && all->sizeHintForRow(itemRow) == 45 &&
+                floating->size() == QSize(630, 720) && qAbs(floatingScale - 1.5) < .01 &&
+                tasks->sizeHintForRow(0) == 45,
+            "text size scales manager text and rows, and the default floating window");
+    manager->grab().save(dir + "/manager-text-150.png");
+    floating->grab().save(dir + "/floating-text-150.png");
+    settings.setValue("scaleWithWindow", false);
+    floating->resize(420, 480);
+    QApplication::processEvents();
+    require(qAbs(floatingScale - 1.5) < .01, "text size applies directly without window scaling");
+    settings.setValue("scaleWithWindow", true);
+    theme::textScale = 1.0;
+    qApp->setStyleSheet(appStyle);
+    manager->setProperty("uiScale", theme::textScale);
+    scaleFloating(true);
+    updateLists();
+    QApplication::processEvents();
+    require(all->font().pixelSize() == managerFont && qAbs(floatingScale - 1.0) < .01,
+            "text size restored");
     for (bool plan : {false, true})
         for (bool checked : {false, true}) {
             QStandardItemModel model(1, 1);
