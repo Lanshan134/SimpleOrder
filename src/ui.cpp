@@ -329,14 +329,15 @@ QDate Calendar::dateAt(const QPoint &p) const {
     if (!table)
         return {};
     auto idx = table->indexAt(table->viewport()->mapFrom(this, p));
-    if (!idx.isValid() || idx.row() < 1 || idx.column() < 1)
+    const int firstColumn = verticalHeaderFormat() == QCalendarWidget::NoVerticalHeader ? 0 : 1;
+    if (!idx.isValid() || idx.row() < 1 || idx.column() < firstColumn)
         return {};
-    int firstNumber = table->model()->index(1, 1).data().toInt();
+    int firstNumber = table->model()->index(1, firstColumn).data().toInt();
     QDate first(yearShown(), monthShown(), 1);
     if (firstNumber > 7)
         first = first.addMonths(-1);
     first = QDate(first.year(), first.month(), firstNumber);
-    const auto result = first.addDays((idx.row() - 1) * 7 + idx.column() - 1);
+    const auto result = first.addDays((idx.row() - 1) * 7 + idx.column() - firstColumn);
     return !displayOutside && result.month() != monthShown() ? QDate() : result;
 }
 bool Calendar::eventFilter(QObject *watched, QEvent *event) {
@@ -583,7 +584,7 @@ void Controller::buildFloating() {
     lv->setContentsMargins(0, 0, 0, 0);
     lv->setSpacing(2);
     lv->setSizeConstraint(QLayout::SetMinAndMaxSize);
-    lv->setAlignment(Qt::AlignTop);
+
     auto section = [&](const QString &s, TaskList *&list, QPushButton *&more) {
         auto h = new QHBoxLayout;
         h->addWidget(heading(s));
@@ -607,30 +608,48 @@ void Controller::buildFloating() {
     tasks->setMinimumHeight(ROW_HEIGHT);
     tasks->setMaximumHeight(5 * ROW_HEIGHT);
     bindList(tasks);
-    lv->addWidget(tasks);
+    lv->addWidget(tasks, 1);
     section("计划", plans, planMore);
-    lv->addWidget(quickBar("添加事项", [this](QString t) {
-        bool created = false;
-        guard([&] { created = add(t); });
-        return created;
-    }));
     auto listScroll = new QScrollArea;
     listScroll->setObjectName("floatingScroll");
     listScroll->setFrameShape(QFrame::NoFrame);
     listScroll->setWidgetResizable(true);
     listScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     listScroll->setWidget(listPage);
-    stack->addWidget(listScroll);
+    auto listContainer = new QWidget;
+    auto listLayout = new QVBoxLayout(listContainer);
+    listLayout->setContentsMargins(0, 0, 0, 0);
+    listLayout->addWidget(listScroll, 1);
+    listLayout->addWidget(quickBar("添加事项", [this](QString t) {
+        bool created = false;
+        guard([&] { created = add(t); });
+        return created;
+    }));
+    stack->addWidget(listContainer);
     auto calendarPage = new QWidget;
     auto cv = new QVBoxLayout(calendarPage);
     cv->setContentsMargins(0, 0, 0, 0);
+    auto calendarContent = new QWidget;
+    auto calendarLayout = new QVBoxLayout(calendarContent);
+    calendarLayout->setContentsMargins(0, 0, 0, 0);
+    calendarLayout->setSpacing(6);
+    calendarLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
     floatCal = new Calendar;
-    cv->addWidget(floatCal);
+    calendarLayout->addWidget(floatCal, 1);
     floatDay = new TaskList;
     floatDay->setAccessibleName("选中日期的事项");
-    floatDay->setFixedHeight(4 * ROW_HEIGHT);
+    floatDay->setFixedHeight(ROW_HEIGHT);
     bindList(floatDay);
-    cv->addWidget(floatDay);
+    calendarLayout->addWidget(floatDay);
+    // The stack may be shorter than the calendar's minimum plus its day list.
+    // Scroll that content instead of forcing overlapping minimum-size children.
+    // Keep quick entry outside the scroller so it remains reachable.
+    auto calendarScroll = new QScrollArea;
+    calendarScroll->setObjectName("floatingCalendarScroll");
+    calendarScroll->setFrameShape(QFrame::NoFrame);
+    calendarScroll->setWidgetResizable(true);
+    calendarScroll->setWidget(calendarContent);
+    cv->addWidget(calendarScroll, 1);
     cv->addWidget(quickBar("添加到选中日期", [this](QString t) {
         bool created = false;
         guard([&] { created = add(t, day); });
@@ -748,7 +767,7 @@ void Controller::scaleFloating(bool force) {
     const int row = scaled(floating, ROW_HEIGHT);
     tasks->setMinimumHeight(row);
     tasks->setMaximumHeight(settings.value("taskRows", 5).toInt() * row);
-    floatDay->setFixedHeight(4 * row);
+    floatDay->setFixedHeight(qBound(1, floatDay->count(), 4) * row);
     for (auto list : {pins, plans})
         list->setFixedHeight(qMax(1, qMin(6, list->count())) * row);
     for (auto list : {pins, tasks, plans, floatDay}) {
@@ -1075,6 +1094,7 @@ void Controller::updateLists() {
     all->fill(visible, true);
     dayItems->fill(sortedItems(dayRows));
     floatDay->fill(sortedItems(floatRows));
+    floatDay->setFixedHeight(qBound(1, floatDay->count(), 4) * scaled(floating, ROW_HEIGHT));
     dayItems->setFixedHeight(qMax(1, qMin(2, dayRows.size())) * scaled(dayItems, ROW_HEIGHT));
     dateLabel->setText(day.toString("yyyy-MM-dd") + QString(" · %1 项").arg(dayRows.size()));
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {
@@ -1576,7 +1596,7 @@ bool Controller::smokeTest(const QString &dir) {
     floating->resize(630, 720);
     QApplication::processEvents();
     require(qAbs(floatingScale - 1.5) < .01, "uniform floating resize factor");
-    require(tasks->sizeHintForRow(0) == 45 && tasks->height() == 225, "scaled row and viewport height");
+    require(tasks->sizeHintForRow(0) == 45 && tasks->maximumHeight() == 225 && tasks->height() <= 225, "scaled row and viewport height");
     require(qAbs(tasks->font().pixelSize() - baseFont * 1.5) <= 1, "scaled floating font");
     require(floating->layout()->contentsMargins().left() == 18 && all->font().pixelSize() == managerFont,
             "scaled spacing scoped to float");
@@ -1909,12 +1929,14 @@ bool Controller::smokeTest(const QString &dir) {
     manager->grab().save(dir + "/new-task.png");
     dirty = false;
     fillEditor();
+    layoutSmokeTest(dir);
     editorSmokeTest(dir);
     draftSmokeTest(dir);
     calendarEditorSmokeTest();
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
+
     return true;
 }
 
@@ -2458,21 +2480,27 @@ void Controller::calendarEditorSmokeTest() {
         return Item{};
     };
     auto clickDateField = [&] {
+        QApplication::processEvents();
         QMouseEvent press(QEvent::MouseButtonPress, QPointF(5, 5), Qt::LeftButton, Qt::LeftButton,
                           Qt::NoModifier);
         QApplication::sendEvent(date, &press);
     };
     auto clickDate = [&](Calendar *calendar, QDate target) {
-        calendar->setCurrentPage(target.year(), target.month());
-        auto table = calendar->findChild<QAbstractItemView *>();
         QApplication::processEvents();
-        int firstNumber = table->model()->index(1, 1).data().toInt();
+        {
+            QSignalBlocker navigation(calendar);
+            calendar->setCurrentPage(target.year(), target.month());
+        }
+        auto table = calendar->findChild<QAbstractItemView *>();
+        const int firstColumn = calendar->verticalHeaderFormat() == QCalendarWidget::NoVerticalHeader ? 0 : 1;
+        int firstNumber = table->model()->index(1, firstColumn).data().toInt();
         QDate first(target.year(), target.month(), 1);
         if (firstNumber > 7)
             first = first.addMonths(-1);
         first = QDate(first.year(), first.month(), firstNumber);
         auto offset = first.daysTo(target);
-        auto index = table->model()->index(1 + offset / 7, 1 + offset % 7);
+        auto index = table->model()->index(1 + offset / 7, firstColumn + offset % 7);
+        require(index.data().toInt() == target.day(), qPrintable(QString("cell mismatch first=%1 target=%2 actual=%3").arg(firstNumber).arg(target.toString(Qt::ISODate)).arg(index.data().toString()) + QString(" shown=%1-%2 selected=%3 firstDay=%4").arg(calendar->yearShown()).arg(calendar->monthShown()).arg(calendar->selectedDate().toString(Qt::ISODate)).arg(calendar->firstDayOfWeek())));
         auto point = table->visualRect(index).center();
         auto global = table->viewport()->mapToGlobal(point);
         QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::LeftButton, Qt::LeftButton,
@@ -2520,7 +2548,9 @@ void Controller::calendarEditorSmokeTest() {
     clickDate(cal, c);
     require(selected == id && date->text() == c.toString(Qt::ISODate) &&
                 stored(id).date == a.toString(Qt::ISODate),
-            "explicit date-field click lets calendar edit deadline only in draft");
+            qPrintable(QString("date draft selected=%1 expected=%2 date=%3 expectedDate=%4 stored=%5 original=%6")
+                .arg(selected).arg(id).arg(date->text()).arg(c.toString(Qt::ISODate))
+                .arg(stored(id).date).arg(a.toString(Qt::ISODate)) + QString(" cal=%1 active=%2 pending=%3 mouse=%4").arg(cal->selectedDate().toString(Qt::ISODate)).arg(dateFieldActive).arg(calendarDateEditPending).arg(cal->mouseDateSelection)));
     int prompts = 0;
     auto answer = [&](QMessageBox::StandardButton button) {
         auto timer = new QTimer(this);
@@ -2718,4 +2748,81 @@ void Controller::smartEntrySmokeTest(const QString &directory) {
     });
     editFloatingItem(selected);
     fillEditor();
+}
+
+void Controller::layoutSmokeTest(const QString &directory) {
+    QStringList failures;
+    auto check = [&](bool ok, const QString &label) {
+        if (!ok)
+            failures.append(label);
+    };
+    floating->show();
+    for (bool scale : {false, true}) {
+        settings.setValue("scaleWithWindow", scale);
+        for (int count : {0, 1, 8}) {
+            QList<Item> rows;
+            for (int n = 0; n < count; ++n) {
+                Item item;
+                item.id = n + 1;
+                item.title = QString("布局验证事项 %1").arg(n + 1);
+                item.group = "other";
+                rows.append(item);
+            }
+            floatDay->fill(rows);
+            for (QSize size : {QSize(390, 340), QSize(490, 446), QSize(420, 900), QSize(630, 720)}) {
+                floating->resize(size);
+                scaleFloating(true);
+                for (int mode : {0, 1}) {
+                    stack->setCurrentIndex(mode);
+                    QApplication::processEvents();
+                    auto page = stack->currentWidget();
+                    auto inputs = page->findChildren<SmartEntry *>();
+                    check(inputs.size() == 1, "one quick entry per view");
+                    if (inputs.isEmpty())
+                        continue;
+                    auto footer = inputs.first()->parentWidget();
+                    const int bottom = footer->mapTo(page, QPoint(0, footer->height())).y();
+                    const QString context = QString("mode=%1 size=%2x%3 rows=%4 scale=%5")
+                                                .arg(mode).arg(size.width()).arg(size.height())
+                                                .arg(count).arg(scale);
+                    check(qAbs(page->height() - bottom) <= 2, "footer anchored: " + context);
+                    if (mode == 1) {
+                        check(floatDay->geometry().top() > floatCal->geometry().bottom(),
+                              "calendar/list disjoint: " + context);
+                        auto table = floatCal->findChild<QAbstractItemView *>();
+                        if (table)
+                            check(floatCal->rect().contains(QRect(table->mapTo(floatCal, QPoint()),
+                                                                 table->size())),
+                                  "calendar last row remains in bounds: " + context);
+                        check(floatDay->height() == qBound(1, count, 4) * scaled(floating, ROW_HEIGHT),
+                              "day list uses actual row count: " + context);
+                    }
+                    if (!scale && count == 1 && size == QSize(420, 900))
+                        floating->grab().save(directory + QString("/layout-tall-%1.png").arg(mode));
+                    if (scale && count == 8 && size == QSize(390, 340))
+                        floating->grab().save(directory + QString("/layout-small-%1.png").arg(mode));
+                }
+            }
+        }
+    }
+    QFile report(directory + "/layout-checks.txt");
+    report.open(QIODevice::WriteOnly);
+    report.write(failures.isEmpty() ? QByteArray("PASS: 48 layout cases\n")
+                                   : failures.join("\n").toUtf8());
+    if (!failures.isEmpty())
+        throw std::runtime_error(failures.first().toStdString());
+    // Verify the compact calendar overflow can be reached using the scrollbar.
+    stack->setCurrentIndex(1);
+    floating->resize(390, 340);
+    scaleFloating(true);
+    QApplication::processEvents();
+    auto scroll = floating->findChild<QScrollArea *>("floatingCalendarScroll");
+    if (!scroll || scroll->verticalScrollBar()->maximum() <= 0)
+        throw std::runtime_error("small calendar overflow must be scrollable");
+    scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+    QApplication::processEvents();
+    floating->grab().save(directory + "/layout-small-calendar-bottom.png");
+    stack->setCurrentIndex(0);
+    floating->resize(420, 480);
+    refresh();
 }

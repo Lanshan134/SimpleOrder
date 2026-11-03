@@ -1123,7 +1123,7 @@ bool Controller::settingsSmokeTest(const QString &directory) {
     scaling->setChecked(false);
     floating->resize(630, 720);
     QApplication::processEvents();
-    require(tasks->font().pixelSize() == 20 && tasks->height() == 320,
+    require(tasks->font().pixelSize() == 20 && tasks->maximumHeight() == 320 && tasks->height() <= 320,
             "settings change floating font and visible rows");
     // Resetting only the floating page leaves unrelated preferences untouched.
     settings.setValue("retentionHours", 72);
