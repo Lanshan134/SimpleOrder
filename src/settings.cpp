@@ -162,7 +162,8 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
     pages = new QStackedWidget;
     right->addWidget(pages, 1);
     auto footer = new QHBoxLayout;
-    saved = hint("普通选项即时生效并自动保存");
+    saved = hint("");
+    saved->setToolTip("设置即时生效并自动保存。");
     footer->addWidget(saved, 1);
     reset = action("恢复本页默认值");
     auto close = action("关闭");
@@ -201,7 +202,7 @@ QWidget *SettingsDialog::page(const QString &title, const QString &description) 
     auto label = new QLabel(title);
     label->setObjectName("settingsPageTitle");
     layout->addWidget(label);
-    layout->addWidget(hint(description));
+    label->setToolTip(description);
     layout->addStretch();
     auto scroll = new QScrollArea;
     scroll->setFrameShape(QFrame::NoFrame);
@@ -596,7 +597,7 @@ void SettingsDialog::displayPage() {
     toggle(done, "显示近期已完成事项", "showCompleted", true);
     choices(done, "完成后保留", "retentionHours",
             {{"立即隐藏", 0}, {"1 天", 24}, {"2 天", 48}, {"3 天", 72}, {"7 天", 168}, {"一直显示", -1}}, 48);
-    done->addRow(hint("已完成事项保持淡化、删除线并排列到末尾；历史入口始终保留。"));
+    done->parentWidget()->setToolTip("已完成事项淡化、加删除线并排到末尾；历史记录保留。");
     auto order = section(p, "排列方式");
     auto sorting =
         choices(order, "未完成事项排序", "sortMode",
@@ -625,7 +626,7 @@ void SettingsDialog::calendarPage() {
     auto content = section(p, "事项标记");
     toggle(content, "显示近期已完成标记", "calendarCompleted", true);
     toggle(content, "新计划默认在日历显示", "planDefaultCalendar", false);
-    content->addRow(hint("计划还需填写具体日期；超出每日标记数量的事项以 +N 显示。"));
+    content->parentWidget()->setToolTip("显示已启用日历的计划执行日，超出每日标记数量以 +N 显示。");
 }
 void SettingsDialog::startupPage() {
     auto p = page("启动与操作", "控制启动界面和窗口关闭方式。");
@@ -669,9 +670,7 @@ void SettingsDialog::startupPage() {
     auto close = section(p, "关闭行为");
     choices(close, "点击窗口关闭按钮时", "closeBehavior",
             {{"切换到另一个窗口", "switch"}, {"隐藏到系统托盘", "tray"}, {"退出程序", "exit"}}, "switch");
-    close->addRow(hint("系统托盘不可用时，自动切换到另一个窗口，避免找不到程序。"));
-    auto keys = section(p, "键盘操作");
-    keys->addRow(hint("列表内：Enter 编辑事项，空格完成或记录进度。全局快捷键将在后续版本提供。"));
+    close->parentWidget()->setToolTip("系统托盘不可用时，切换到另一个窗口。");
 }
 void SettingsDialog::dataPage() {
     auto p = page("数据与备份", "备份包含事项、完成时间和类型配置。导入前会保留原数据备份。");
@@ -755,7 +754,7 @@ void SettingsDialog::dataPage() {
             saved->setText("备份已保存");
         });
     });
-    automatic->addRow(hint("只清理本程序生成的自动备份，手动导出的备份不受保留数量影响。"));
+    automatic->parentWidget()->setToolTip("保留数量只作用于自动备份，不清理手动导出的备份。");
     auto danger = section(p, "清空事项");
     auto clear = action("清空全部事项…");
     clear->setObjectName("danger");
@@ -811,8 +810,9 @@ void SettingsDialog::aboutPage() {
     auto p = page("关于与帮助", "简序 · SimpleOrder · 个人任务管理器");
     auto about = section(p, "当前版本");
     about->addRow("版本", new QLabel(QCoreApplication::applicationVersion() + " · 源码开发版"));
-    about->addRow(hint("设置即时保存；只影响当前页面的恢复默认值不会重置其他设置。"));
+    about->parentWidget()->setToolTip("设置即时保存；恢复本页默认值不影响其他页面。");
     auto help = section(p, "常用操作");
+    help->addRow(hint("列表内：Enter 编辑事项，空格完成或记录进度。"));
     help->addRow(hint("• 拖动悬浮窗标题移动，拖动右下角调整大小。\n• "
                       "点击事项名称编辑，右键可置顶或取消置顶。\n• 选中日期后，在右侧表单填写详细新事项。\n• "
                       "对号记录完成；计划按目标次数累计。\n• 修改详情后请保存，再切换事项。"));
