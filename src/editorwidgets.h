@@ -32,6 +32,13 @@ class EditorRow : public QWidget {
         if (stacked != (width() < 480))
             reflow();
     }
+    void changeEvent(QEvent *event) override {
+        QWidget::changeEvent(event);
+        // The cached minimum height goes stale when a stylesheet change resizes the fields;
+        // reflow once the children have been repolished too.
+        if (event->type() == QEvent::StyleChange || event->type() == QEvent::FontChange)
+            QTimer::singleShot(0, this, [this] { reflow(); });
+    }
 
   public:
     EditorRow(QWidget *a, QWidget *b, QWidget *parent = nullptr) : QWidget(parent), left(a), right(b) {
@@ -58,6 +65,9 @@ inline QWidget *editorField(const QString &label, QWidget *input) {
     v->setAlignment(Qt::AlignTop);
     auto caption = new QLabel(label);
     caption->setObjectName("heading");
+    caption->setBuddy(input);
+    if (input->accessibleName().isEmpty())
+        input->setAccessibleName(label);
     v->addWidget(caption);
     v->addWidget(input);
     box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);

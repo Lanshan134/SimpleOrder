@@ -1,3 +1,4 @@
+#include "theme.h"
 #include "ui.h"
 #include <iostream>
 
@@ -12,11 +13,19 @@ int main(int argc, char **argv) {
     app.setApplicationName("SimpleOrder");
     app.setApplicationDisplayName("简序 · SimpleOrder");
     app.setApplicationVersion("0.2.0");
-    app.setFont(QFont("Microsoft YaHei UI", 11));
-    QFile style(QCoreApplication::applicationDirPath() + "/style.qss");
-    if (style.open(QIODevice::ReadOnly))
-        app.setStyleSheet(QString::fromUtf8(style.readAll()));
     bool test = app.arguments().contains("--self-test");
+    // Self-tests assert exact metrics, so they ignore the machine's text size.
+    theme::textScale = test ? 1.0 : theme::systemTextScale();
+    app.setFont(QFont("Microsoft YaHei UI", qRound(11 * theme::textScale)));
+    // Qt 5 stylesheets cannot reach placeholder text; keep it at AA contrast via the palette.
+    auto palette = app.palette();
+    palette.setColor(QPalette::PlaceholderText, theme::color("ink-soft"));
+    app.setPalette(palette);
+    QFile style(QCoreApplication::applicationDirPath() + "/style.qss");
+    if (style.open(QIODevice::ReadOnly)) {
+        theme::baseStyle = theme::resolve(QString::fromUtf8(style.readAll()));
+        app.setStyleSheet(theme::scaleText(theme::baseStyle));
+    }
     QString dataDir;
     if (test) {
         dataDir = QDir::currentPath() + "/test-results/run-" +
