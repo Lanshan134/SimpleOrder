@@ -2,7 +2,7 @@
 
 桌面一角，井然有序。
 
-Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.3.0-beta.2 试用版；本地 `outputs/` 中旧安装包不代表最新源码。
+Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前源码版本为 2.1.0；下方历史试用包及本地 `outputs/` 中的旧程序不代表最新源码。
 
 ## 下载试用版
 
