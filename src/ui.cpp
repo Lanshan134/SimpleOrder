@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "settings.h"
 #include <algorithm>
+#include <tuple>
 static QHash<QString, Category> categoryCache;
 static constexpr int ROW_HEIGHT = 30;
 
@@ -32,6 +33,13 @@ QColor foregroundColor(const QWidget *widget, QColor color) {
 int scaled(const QWidget *widget, int value) {
     return qMax(1, qRound(value * widgetScale(widget)));
 }
+// Stacked floating lists keep a hidden scrollbar's width free so their check columns line up.
+int checkInset(const QWidget *widget) {
+    auto list = qobject_cast<const QAbstractScrollArea *>(widget);
+    if (!list || !list->property("alignChecks").toBool() || list->verticalScrollBar()->isVisibleTo(list))
+        return 0;
+    return list->verticalScrollBar()->sizeHint().width();
+}
 class RowDelegate : public QStyledItemDelegate {
   public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -54,16 +62,17 @@ class RowDelegate : public QStyledItemDelegate {
             baseFont.setPointSizeF(baseFont.pointSizeF() / scale);
         p->setFont(baseFont);
         if (!idx.data(Qt::UserRole).toLongLong()) {
-            p->setPen(foregroundColor(opt.widget, QColor("#5f6b7c")));
+            p->setPen(foregroundColor(opt.widget, theme::color("ink-muted")));
             p->drawText(r.adjusted(6, 0, 0, 0), Qt::AlignVCenter, idx.data().toString());
             p->restore();
             return;
         }
         if (opt.state & QStyle::State_Selected)
-            p->fillRect(r, surfaceColor(opt.widget, QColor("#eaf1fb"), "surfaceOpacity"));
+            p->fillRect(r, surfaceColor(opt.widget, theme::color("hover"), "surfaceOpacity"));
         else if (opt.state & QStyle::State_MouseOver)
-            p->fillRect(r, surfaceColor(opt.widget, QColor("#f4f7fb"), "surfaceOpacity"));
-        const QColor c = idx.data(Qt::UserRole + 1).value<QColor>();
+            p->fillRect(r, surfaceColor(opt.widget, theme::color("row-hover"), "surfaceOpacity"));
+        const QColor c = foregroundColor(opt.widget, idx.data(Qt::UserRole + 1).value<QColor>());
+        const int right = r.right() - qRound(checkInset(opt.widget) / scale);
         bool plan = idx.data(Qt::UserRole + 2).toBool(), done = idx.data(Qt::UserRole + 3).toBool();
         // Done rows fade the dot only; strikethrough and a lighter tone carry the state at readable contrast.
         p->setOpacity(done ? 0.62 : 1.0);
@@ -76,29 +85,31 @@ class RowDelegate : public QStyledItemDelegate {
         small.setPixelSize(12);
         p->setFont(small);
         int dw = qMin(117, QFontMetrics(small).horizontalAdvance(detail));
-        p->setPen(foregroundColor(opt.widget, QColor("#5f6b7c")));
-        p->drawText(QRect(r.right() - dw - 29, r.top(), dw, r.height()), Qt::AlignVCenter | Qt::AlignRight,
+        p->setPen(foregroundColor(opt.widget, theme::color("ink-muted")));
+        p->drawText(QRect(right - dw - 29, r.top(), dw, r.height()), Qt::AlignVCenter | Qt::AlignRight,
                     detail);
         QFont main = baseFont;
         main.setStrikeOut(done);
         p->setFont(main);
-        p->setPen(foregroundColor(opt.widget, QColor(done ? "#5f6b7c" : "#293448")));
-        QRect text = r.adjusted(24, 0, -dw - 37, 0);
+        p->setPen(foregroundColor(opt.widget, theme::color(done ? "ink-muted" : "ink")));
+        QRect text = r.adjusted(24, 0, right - r.right() - dw - 37, 0);
         p->drawText(
             text, Qt::AlignVCenter,
             QFontMetrics(main).elidedText(idx.data().toString(), Qt::ElideRight, qMax(0, text.width())));
-        QRect check(r.right() - 23, r.center().y() - 9, 18, 18);
-        p->setPen(QPen(QColor(done ? "#4a7099" : "#808ea3"), 1));
-        p->setBrush(done ? QColor("#4a7099") : Qt::white);
+        QRect check(right - 23, r.center().y() - 9, 18, 18);
+        const QColor box = foregroundColor(opt.widget, theme::color(done ? "accent" : "control-border"));
+        p->setPen(QPen(box, 1));
+        p->setBrush(done ? box : surfaceColor(opt.widget, theme::color("surface"), "surfaceOpacity"));
         p->drawRoundedRect(check, 3, 3);
         if (done) {
-            p->setPen(QPen(Qt::white, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p->setPen(QPen(foregroundColor(opt.widget, Qt::white), 1.8, Qt::SolidLine, Qt::RoundCap,
+                           Qt::RoundJoin));
             p->drawLine(check.left() + 4, check.center().y(), check.left() + 8, check.bottom() - 4);
             p->drawLine(check.left() + 8, check.bottom() - 4, check.right() - 3, check.top() + 4);
         }
         // QListWidget's own focus rect is disabled in style.qss; draw one that meets 3:1.
         if ((opt.state & QStyle::State_HasFocus) && opt.widget && opt.widget->hasFocus()) {
-            p->setPen(QPen(QColor("#456d98"), 2));
+            p->setPen(QPen(theme::color("focus"), 2));
             p->setBrush(Qt::NoBrush);
             p->drawRoundedRect(QRectF(r).adjusted(1, 1, -1, -1), 5, 5);
         }
@@ -164,7 +175,8 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
         if (!id)
             return;
         const QPoint p = viewport()->mapFromGlobal(QCursor::pos());
-        if (p.x() > viewport()->width() - scaled(this, 30) && !property("previewOnly").toBool()) {
+        if (p.x() > viewport()->width() - checkInset(this) - scaled(this, 30) &&
+            !property("previewOnly").toBool()) {
             if (complete)
                 complete(id);
         } else if (edit)
@@ -182,7 +194,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
     for (const auto &i : items) {
         int section = i.done ? 3 : i.pinned ? 0 : i.type == "task" ? 1 : 2;
         if (headings && section != last) {
-            auto h = new QListWidgetItem(QStringList{"置顶", "Task", "计划", "已完成"}[section], this);
+            auto h = new QListWidgetItem(QStringList{"置顶", "任务", "计划", "已完成"}[section], this);
             h->setData(Qt::AccessibleTextRole, "分组：" + h->text());
             h->setFlags(Qt::NoItemFlags);
             last = section;
@@ -250,14 +262,24 @@ Calendar::Calendar(QWidget *parent) : QCalendarWidget(parent) {
         table->viewport()->setAcceptDrops(false);
         table->viewport()->installEventFilter(this);
     }
+    // Text arrows take the stylesheet colour, so they fade with the floating text like everything else.
+    for (auto [name, glyph, label] : {std::tuple{"qt_calendar_prevmonth", "‹", "上个月"},
+                                      std::tuple{"qt_calendar_nextmonth", "›", "下个月"}})
+        if (auto arrow = findChild<QToolButton *>(name)) {
+            arrow->setIcon(QIcon());
+            arrow->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            arrow->setText(glyph);
+            arrow->setToolTip(label);
+            arrow->setAccessibleName(label);
+        }
     QTextCharFormat weekend;
-    weekend.setForeground(QColor("#66758a"));
+    weekend.setForeground(theme::color("ink-soft"));
     setWeekdayTextFormat(Qt::Saturday, weekend);
     setWeekdayTextFormat(Qt::Sunday, weekend);
 }
 void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     if (!displayOutside && d.month() != monthShown()) {
-        p->fillRect(r, surfaceColor(this, QColor(Qt::white), "surfaceOpacity"));
+        p->fillRect(r, surfaceColor(this, theme::color("surface"), "surfaceOpacity"));
         return;
     }
     QCalendarWidget::paintCell(p, r, d);
@@ -267,7 +289,7 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     if (d == selectedDate() && table && table->hasFocus()) {
         p->save();
         p->setRenderHint(QPainter::Antialiasing);
-        p->setPen(QPen(QColor("#456d98"), 2 * scale));
+        p->setPen(QPen(theme::color("focus"), 2 * scale));
         p->setBrush(Qt::NoBrush);
         p->drawRoundedRect(QRectF(r).adjusted(2 * scale, 2 * scale, -2 * scale, -2 * scale), 4 * scale,
                            4 * scale);
@@ -301,7 +323,7 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
         QFont font = p->font();
         font.setPointSize(7);
         p->setFont(font);
-        p->setPen(foregroundColor(this, QColor("#5f6b7c")));
+        p->setPen(foregroundColor(this, theme::color("ink-muted")));
         p->drawText(QRect(left + shown * 8, area.bottom() - 14, 25, 14), Qt::AlignVCenter,
                     "+" + QString::number(hits.size() - shown));
     }
@@ -378,8 +400,8 @@ Controller::Controller(Store &s, const QString &path, bool test)
     applyPreferences();
     calendarView = settings.value("defaultView", "tasks").toString() == "calendar";
     stack->setCurrentIndex(calendarView ? 1 : 0);
-    switchButton->setText(calendarView ? "☷ 列表" : "▦ 日历");
-    floating->findChild<QLabel *>("windowTitle")->setText(calendarView ? "Calendar" : "Tasks");
+    switchButton->setText(calendarView ? "列表" : "日历");
+    floating->findChild<QLabel *>("windowTitle")->setText(calendarView ? "日历" : "任务");
     if (!testing) {
         if (settings.value("rememberGeometry", true).toBool()) {
             floating->restoreGeometry(settings.value("floatingGeometry").toByteArray());
@@ -419,7 +441,7 @@ Controller::Controller(Store &s, const QString &path, bool test)
         pix.fill(Qt::transparent);
         QPainter p(&pix);
         p.setRenderHint(QPainter::Antialiasing);
-        p.setBrush(QColor("#4a7099"));
+        p.setBrush(theme::color("accent"));
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(1, 1, 30, 30, 8, 8);
         p.setPen(Qt::white);
@@ -513,7 +535,7 @@ void Controller::buildFloating() {
     floating = new Window(Qt::Window | Qt::WindowCloseButtonHint | Qt::WindowMinimizeButtonHint |
                           Qt::WindowTitleHint);
     floating->setObjectName("floatingWindow");
-    floating->setWindowTitle("简序 · Tasks");
+    floating->setWindowTitle("简序 · 悬浮窗");
     floating->resize(420, 480);
     floating->customSurface = true;
     floating->setAttribute(Qt::WA_TranslucentBackground);
@@ -527,11 +549,11 @@ void Controller::buildFloating() {
     auto titleBar = new QWidget;
     auto head = new QHBoxLayout(titleBar);
     head->setContentsMargins(0, 0, 0, 0);
-    auto label = new QLabel("Tasks");
+    auto label = new QLabel("任务");
     label->setObjectName("windowTitle");
     head->addWidget(label);
     head->addStretch();
-    switchButton = button("▦ 日历");
+    switchButton = button("日历");
     auto manage = button("管理");
     manage->setObjectName("openManager");
     manage->setToolTip("打开完整管理窗口");
@@ -560,14 +582,18 @@ void Controller::buildFloating() {
         lv->addLayout(h);
         list = new TaskList;
         list->setAccessibleName(s + "事项");
+        list->setProperty("alignChecks", true);
         bindList(list);
         lv->addWidget(list);
     };
     section("置顶", pins, pinMore);
-    lv->addWidget(heading("Task"));
+    lv->addWidget(heading("任务"));
     tasks = new TaskList;
     tasks->setAccessibleName("任务");
-    tasks->setFixedHeight(5 * ROW_HEIGHT);
+    tasks->setProperty("alignChecks", true);
+    // Up to the configured rows, giving way when the window is short, so the page itself rarely scrolls.
+    tasks->setMinimumHeight(ROW_HEIGHT);
+    tasks->setMaximumHeight(5 * ROW_HEIGHT);
     bindList(tasks);
     lv->addWidget(tasks);
     section("计划", plans, planMore);
@@ -594,8 +620,8 @@ void Controller::buildFloating() {
     connect(switchButton, &QPushButton::clicked, this, [this, label] {
         calendarView = !calendarView;
         stack->setCurrentIndex(calendarView ? 1 : 0);
-        label->setText(calendarView ? "Calendar" : "Tasks");
-        switchButton->setText(calendarView ? "☷ 列表" : "▦ 日历");
+        label->setText(calendarView ? "日历" : "任务");
+        switchButton->setText(calendarView ? "列表" : "日历");
     });
     connect(manage, &QPushButton::clicked, this, [this] {
         manager->show();
@@ -617,11 +643,22 @@ void Controller::buildFloating() {
     floatCal->schedule = [this](qint64 id, QDate d) { guard([&] { schedule(id, d); }); };
 }
 void Controller::setupFloatingScaling() {
-    floatingBaseStyle = qApp->styleSheet();
+    // Text size is folded into the floating factor, so start from the unscaled sheet.
+    floatingBaseStyle = theme::baseStyle;
     for (auto layout : floating->findChildren<QLayout *>())
         floatingLayouts.append({layout, layout->contentsMargins(), layout->spacing()});
     floating->setProperty("uiScale", 1.0);
-    floating->onResize = [this] { scaleFloating(); };
+    // Restyling on every resize step makes drags stutter; coalesce them. Tests stay synchronous.
+    auto rescale = new QTimer(this);
+    rescale->setSingleShot(true);
+    rescale->setInterval(40);
+    connect(rescale, &QTimer::timeout, this, [this] { scaleFloating(); });
+    floating->onResize = [this, rescale] {
+        if (testing)
+            scaleFloating();
+        else
+            rescale->start();
+    };
     scaleFloating();
 }
 void Controller::scaleFloating(bool force) {
@@ -631,7 +668,7 @@ void Controller::scaleFloating(bool force) {
     // to text and geometry. Always scale from the original metrics, never cumulatively.
     const qreal factor =
         qBound(0.7,
-               settings.value("fontSize", 15).toDouble() / 15.0 *
+               theme::textScale * settings.value("fontSize", 15).toDouble() / 15.0 *
                    (settings.value("scaleWithWindow", true).toBool()
                         ? qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0))
                         : 1.0),
@@ -686,7 +723,8 @@ void Controller::scaleFloating(bool force) {
             metrics.layout->setSpacing(px(metrics.spacing));
     }
     const int row = scaled(floating, ROW_HEIGHT);
-    tasks->setFixedHeight(settings.value("taskRows", 5).toInt() * row);
+    tasks->setMinimumHeight(row);
+    tasks->setMaximumHeight(settings.value("taskRows", 5).toInt() * row);
     floatDay->setFixedHeight(4 * row);
     for (auto list : {pins, plans})
         list->setFixedHeight(qMax(1, qMin(6, list->count())) * row);
@@ -713,6 +751,8 @@ void Controller::buildManager() {
     manager->setWindowTitle("简序 · 完整管理窗口");
     manager->resize(1120, 880);
     manager->setMinimumSize(980, 730);
+    // Painted rows and calendar marks follow the Windows text size like the stylesheet text does.
+    manager->setProperty("uiScale", theme::textScale);
     auto root = new QVBoxLayout(manager);
     root->setContentsMargins(20, 16, 20, 16);
     auto header = new QHBoxLayout;
@@ -720,7 +760,7 @@ void Controller::buildManager() {
     label->setObjectName("windowTitle");
     header->addWidget(label);
     header->addStretch();
-    auto showFloat = button("悬浮窗"), settingsButton = button("⚙ 设置"), exit = button("退出");
+    auto showFloat = button("悬浮窗"), settingsButton = button("设置"), exit = button("退出");
     header->addWidget(showFloat);
     header->addWidget(settingsButton);
     header->addWidget(exit);
@@ -747,7 +787,7 @@ void Controller::buildManager() {
     all->setAccessibleName("全部事项");
     bindList(all);
     lv->addWidget(all, 1);
-    lv->addWidget(quickBar("新建 Task（无日期）", [this](QString t) { guard([&] { add(t); }); }));
+    lv->addWidget(quickBar("新建任务（无日期）", [this](QString t) { guard([&] { add(t); }); }));
     split->addWidget(left);
     auto right = new QFrame;
     right->setObjectName("subpanel");
@@ -808,8 +848,8 @@ void Controller::buildManager() {
         group->addItem(c.name, c.id);
     type = new QComboBox(editor);
     type->hide();
-    type->addItem("Task · 任务", "task");
-    type->addItem("Plan · 计划", "plan");
+    type->addItem("任务", "task");
+    type->addItem("计划", "plan");
     timeKind = new QComboBox(editor);
     timeKind->hide();
     timeKind->addItem("截止时间", "due");
@@ -995,7 +1035,7 @@ void Controller::updateLists() {
     all->fill(visible, true);
     dayItems->fill(sortedItems(dayRows));
     floatDay->fill(sortedItems(floatRows));
-    dayItems->setFixedHeight(qMax(1, qMin(2, dayRows.size())) * ROW_HEIGHT);
+    dayItems->setFixedHeight(qMax(1, qMin(2, dayRows.size())) * scaled(dayItems, ROW_HEIGHT));
     dateLabel->setText(day.toString("yyyy-MM-dd") + QString(" · %1 项").arg(dayRows.size()));
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {
         for (int n = 0; n < list->count(); ++n)
@@ -1196,6 +1236,7 @@ void Controller::editFloatingItem(qint64 id) {
     host->removeWidget(scroll);
     host->removeItem(actionRow);
     QDialog dialog(nullptr, Qt::Window | Qt::WindowCloseButtonHint);
+    dialog.setObjectName("itemDialog");
     itemWindow = &dialog;
     dialog.setWindowModality(Qt::NonModal);
     dialog.setWindowTitle(settingsPreview ? "查看事项" : "编辑事项");
@@ -1205,9 +1246,6 @@ void Controller::editFloatingItem(qint64 id) {
     body->addWidget(editorHeader);
     body->addWidget(scroll, 1);
     body->addLayout(actionRow);
-    auto close = button("关闭");
-    body->addWidget(close);
-    connect(close, &QPushButton::clicked, &dialog, &QDialog::close);
     // Non-modal: the editor stays alive while other app windows can be opened.
     // Closing restores the same draft to the manager without saving or prompting.
     QEventLoop loop;
@@ -1741,7 +1779,7 @@ void Window::paintEvent(QPaintEvent *event) {
         return;
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    QColor border("#dce4ef"), background(Qt::white);
+    QColor border = theme::color("line"), background = theme::color("surface");
     border.setAlphaF(backgroundOpacity);
     background.setAlphaF(backgroundOpacity);
     p.setPen(QPen(border, 1));
@@ -1852,12 +1890,17 @@ void Controller::applyFloatingAppearance() {
                           qBound(MIN_TEXT_OPACITY, settings.value("textOpacity", 100).toInt(), 100) / 100.0);
     for (int weekday = 1; weekday <= 7; ++weekday) {
         QTextCharFormat format;
-        format.setForeground(foregroundColor(floatCal, QColor(weekday >= 6 ? "#66758a" : "#293448")));
+        format.setForeground(foregroundColor(floatCal, theme::color(weekday >= 6 ? "ink-soft" : "ink")));
         floatCal->setWeekdayTextFormat(Qt::DayOfWeek(weekday), format);
     }
     auto headerFormat = floatCal->headerTextFormat();
-    headerFormat.setForeground(foregroundColor(floatCal, QColor("#293448")));
+    headerFormat.setForeground(foregroundColor(floatCal, theme::color("ink")));
     floatCal->setHeaderTextFormat(headerFormat);
+    for (auto input : floating->findChildren<QLineEdit *>()) {
+        auto palette = input->palette();
+        palette.setColor(QPalette::PlaceholderText, foregroundColor(floating, theme::color("ink-soft")));
+        input->setPalette(palette);
+    }
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setVisible(settings.value("frameless", true).toBool());
     if (visible)

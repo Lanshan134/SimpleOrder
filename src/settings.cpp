@@ -65,7 +65,7 @@ class TypeDelegate : public QStyledItemDelegate {
             return;
         }
         p->save();
-        p->fillRect(option.rect, option.state & QStyle::State_Selected ? QColor("#dce8f6") : Qt::white);
+        p->fillRect(option.rect, theme::color(option.state & QStyle::State_Selected ? "selection" : "surface"));
         p->setRenderHint(QPainter::Antialiasing);
         p->setPen(Qt::NoPen);
         p->setBrush(QColor(index.data(Qt::UserRole + 1).toString()));
@@ -89,12 +89,12 @@ class ToggleSwitch : public QCheckBox {
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
         // The off track needs 3:1 against white to read as a control.
-        p.setBrush(isEnabled() ? (isChecked() ? QColor("#4a7099") : QColor("#808ea3")) : QColor("#e4e8ee"));
+        p.setBrush(theme::color(isEnabled() ? (isChecked() ? "accent" : "control-border") : "control-off"));
         p.drawRoundedRect(QRectF(2, 3, 34, 18), 9, 9);
         p.setBrush(Qt::white);
         p.drawEllipse(QRectF(isChecked() ? 19 : 5, 5, 14, 14));
         if (hasFocus()) {
-            p.setPen(QPen(QColor("#456d98"), 2));
+            p.setPen(QPen(theme::color("focus"), 2));
             p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(QRectF(1, 1, 36, 22), 11, 11);
         }
@@ -136,18 +136,21 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
     setMinimumSize(760, 560);
     if (c.testing)
         setAttribute(Qt::WA_DontShowOnScreen);
-    setStyleSheet(
-        "QDialog#settingsDialog {background:#f3f6fa;} QListWidget#settingsNavigation "
-        "{background:#edf2f8;border:0;font-size:15px;} QListWidget#settingsNavigation::item {padding:12px "
-        "15px;border-radius:7px;} QListWidget#settingsNavigation::item:selected "
-        "{background:#dbe7f5;color:#315f9b;} QListWidget#settingsNavigation::item:focus {border:2px solid "
-        "#456d98;padding:10px 13px;} QLabel#settingsPageTitle {font-size:22px;font-weight:600;} "
-        "QLabel#settingsHint {font-size:12px;color:#5f6b7c;} QGroupBox {background:white;border:1px solid "
-        "#e1e7f0;border-radius:10px;margin-top:14px;padding:14px 12px 10px;} QGroupBox::title "
-        "{subcontrol-origin:margin;left:13px;padding:0 4px;color:#5a6d86;font-size:13px;} QPushButton#danger "
-        "{color:#b65353;} QTableWidget {background:white;border:1px solid "
-        "#e1e7f0;border-radius:8px;gridline-color:#edf1f7;} QHeaderView::section "
-        "{background:#edf2f8;border:0;padding:8px;color:#5f6b7c;}");
+    setStyleSheet(theme::style(
+        "QDialog#settingsDialog {background:@panel;}"
+        "QStackedWidget QScrollArea > QWidget > QWidget {background:transparent;}"
+        "QListWidget#settingsNavigation {background:@tint;border:0;font-size:15px;}"
+        "QListWidget#settingsNavigation::item {padding:12px 15px;border-radius:7px;}"
+        "QListWidget#settingsNavigation::item:selected {background:@selection;color:@accent-ink;}"
+        "QListWidget#settingsNavigation::item:focus {border:2px solid @focus;padding:10px 13px;}"
+        "QLabel#settingsPageTitle {font-size:22px;font-weight:600;}"
+        "QLabel#settingsHint {font-size:12px;color:@ink-muted;}"
+        "QGroupBox {background:@surface;border:1px solid @line;border-radius:10px;margin-top:14px;"
+        "padding:14px 12px 10px;}"
+        "QGroupBox::title {subcontrol-origin:margin;left:13px;padding:0 4px;color:@ink-group;font-size:13px;}"
+        "QPushButton#danger {color:@danger;}"
+        "QTableWidget {background:@surface;border:1px solid @line;border-radius:8px;gridline-color:@tint;}"
+        "QHeaderView::section {background:@tint;border:0;padding:8px;color:@ink-muted;}"));
     auto root = new QHBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
     root->setSpacing(16);
@@ -316,7 +319,7 @@ void SettingsDialog::floatingPage() {
     auto layout = section(p, "文字与布局");
     number(layout, "基础字号", "fontSize", 12, 22, 15, " px");
     toggle(layout, "随窗口大小缩放", "scaleWithWindow", true);
-    number(layout, "Task 可见行数", "taskRows", 3, 12, 5, " 行");
+    number(layout, "任务可见行数", "taskRows", 3, 12, 5, " 行");
     number(layout, "置顶默认显示", "pinRows", 1, 6, 2, " 行");
     number(layout, "计划默认显示", "planRows", 1, 6, 2, " 行");
     auto display = section(p, "启动显示与位置");

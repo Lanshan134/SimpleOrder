@@ -1,6 +1,7 @@
 #pragma once
 #include "planeditor.h"
 #include "store.h"
+#include "theme.h"
 #include <QtWidgets>
 #include <functional>
 
