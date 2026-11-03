@@ -13,6 +13,10 @@ int main(int argc, char **argv) {
     app.setApplicationDisplayName("简序 · SimpleOrder");
     app.setApplicationVersion("0.2.0");
     app.setFont(QFont("Microsoft YaHei UI", 11));
+    // Qt 5 stylesheets cannot reach placeholder text; keep it at AA contrast via the palette.
+    auto palette = app.palette();
+    palette.setColor(QPalette::PlaceholderText, QColor("#66758a"));
+    app.setPalette(palette);
     QFile style(QCoreApplication::applicationDirPath() + "/style.qss");
     if (style.open(QIODevice::ReadOnly))
         app.setStyleSheet(QString::fromUtf8(style.readAll()));

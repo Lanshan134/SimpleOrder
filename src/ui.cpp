@@ -54,7 +54,7 @@ class RowDelegate : public QStyledItemDelegate {
             baseFont.setPointSizeF(baseFont.pointSizeF() / scale);
         p->setFont(baseFont);
         if (!idx.data(Qt::UserRole).toLongLong()) {
-            p->setPen(foregroundColor(opt.widget, QColor("#7f8b9c")));
+            p->setPen(foregroundColor(opt.widget, QColor("#5f6b7c")));
             p->drawText(r.adjusted(6, 0, 0, 0), Qt::AlignVCenter, idx.data().toString());
             p->restore();
             return;
@@ -65,35 +65,42 @@ class RowDelegate : public QStyledItemDelegate {
             p->fillRect(r, surfaceColor(opt.widget, QColor("#f4f7fb"), "surfaceOpacity"));
         const QColor c = idx.data(Qt::UserRole + 1).value<QColor>();
         bool plan = idx.data(Qt::UserRole + 2).toBool(), done = idx.data(Qt::UserRole + 3).toBool();
-        if (done)
-            p->setOpacity(0.62);
+        // Done rows fade the dot only; strikethrough and a lighter tone carry the state at readable contrast.
+        p->setOpacity(done ? 0.62 : 1.0);
         p->setPen(QPen(c, 2));
         p->setBrush(plan ? QBrush(Qt::NoBrush) : QBrush(c));
         p->drawEllipse(QPointF(r.left() + 10, r.center().y()), 4, 4);
+        p->setOpacity(1.0);
         QString detail = idx.data(Qt::UserRole + 4).toString();
         QFont small = baseFont;
         small.setPixelSize(12);
         p->setFont(small);
         int dw = qMin(117, QFontMetrics(small).horizontalAdvance(detail));
-        p->setPen(foregroundColor(opt.widget, QColor("#8b94a2")));
+        p->setPen(foregroundColor(opt.widget, QColor("#5f6b7c")));
         p->drawText(QRect(r.right() - dw - 29, r.top(), dw, r.height()), Qt::AlignVCenter | Qt::AlignRight,
                     detail);
         QFont main = baseFont;
         main.setStrikeOut(done);
         p->setFont(main);
-        p->setPen(foregroundColor(opt.widget, QColor(done ? "#6f7d90" : "#293448")));
+        p->setPen(foregroundColor(opt.widget, QColor(done ? "#5f6b7c" : "#293448")));
         QRect text = r.adjusted(24, 0, -dw - 37, 0);
         p->drawText(
             text, Qt::AlignVCenter,
             QFontMetrics(main).elidedText(idx.data().toString(), Qt::ElideRight, qMax(0, text.width())));
         QRect check(r.right() - 23, r.center().y() - 9, 18, 18);
-        p->setPen(QPen(QColor("#a3b4c9"), 1));
-        p->setBrush(done ? QColor("#7995b6") : Qt::white);
+        p->setPen(QPen(QColor(done ? "#4a7099" : "#808ea3"), 1));
+        p->setBrush(done ? QColor("#4a7099") : Qt::white);
         p->drawRoundedRect(check, 3, 3);
         if (done) {
             p->setPen(QPen(Qt::white, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             p->drawLine(check.left() + 4, check.center().y(), check.left() + 8, check.bottom() - 4);
             p->drawLine(check.left() + 8, check.bottom() - 4, check.right() - 3, check.top() + 4);
+        }
+        // QListWidget's own focus rect is disabled in style.qss; draw one that meets 3:1.
+        if ((opt.state & QStyle::State_HasFocus) && opt.widget && opt.widget->hasFocus()) {
+            p->setPen(QPen(QColor("#456d98"), 2));
+            p->setBrush(Qt::NoBrush);
+            p->drawRoundedRect(QRectF(r).adjusted(1, 1, -1, -1), 5, 5);
         }
         p->restore();
     }
@@ -120,6 +127,7 @@ QWidget *quickBar(const QString &placeholder, const std::function<void(QString)>
     auto input = new QLineEdit;
     input->setMaxLength(200);
     input->setPlaceholderText(placeholder);
+    input->setAccessibleName(placeholder);
     auto b = button("+", "primary");
     b->setAccessibleName("添加事项");
     h->addWidget(input);
@@ -147,7 +155,8 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
     setDragDropMode(QAbstractItemView::DragOnly);
     setFrameShape(QFrame::NoFrame);
     setMinimumWidth(260);
-    setAccessibleName("事项列表，点击编辑，右侧按钮完成或记录进度");
+    setAccessibleName("事项列表");
+    setAccessibleDescription("回车编辑，空格完成或记录一次进度，菜单键打开更多操作");
     connect(this, &QListWidget::itemClicked, this, [this](QListWidgetItem *i) {
         if (pressedButton != Qt::LeftButton)
             return;
@@ -174,6 +183,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         int section = i.done ? 3 : i.pinned ? 0 : i.type == "task" ? 1 : 2;
         if (headings && section != last) {
             auto h = new QListWidgetItem(QStringList{"置顶", "Task", "计划", "已完成"}[section], this);
+            h->setData(Qt::AccessibleTextRole, "分组：" + h->text());
             h->setFlags(Qt::NoItemFlags);
             last = section;
         }
@@ -197,6 +207,19 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
                 marker += (marker.isEmpty() ? QString() : " ") + i.time;
         }
         row->setData(Qt::UserRole + 4, marker);
+        // The checkbox, dot and marker are painted; spell out their state for assistive technology.
+        QStringList spoken{i.title,
+                           i.type == "plan" ? QString("计划，进度 %1/%2%3")
+                                                  .arg(i.progress)
+                                                  .arg(i.target)
+                                                  .arg(i.done ? "，已达标" : "")
+                                            : QString(i.done ? "任务，已完成" : "任务，未完成")};
+        if (i.pinned)
+            spoken << "置顶";
+        if (i.type != "plan" && !i.date.isEmpty())
+            spoken << i.date + (i.time.isEmpty() ? QString() : " " + i.time);
+        spoken << groupName(i.group);
+        row->setData(Qt::AccessibleTextRole, spoken.join("，"));
         row->setToolTip(i.title + "\n" + groupName(i.group) + " · " + (i.date.isEmpty() ? "未安排" : i.date) +
                         (i.time.isEmpty() ? QString() : " " + i.time) + "\n" +
                         (i.type == "plan" ? "点击对号记录进度；达标后完成" : "点击对号切换完成"));
@@ -228,7 +251,7 @@ Calendar::Calendar(QWidget *parent) : QCalendarWidget(parent) {
         table->viewport()->installEventFilter(this);
     }
     QTextCharFormat weekend;
-    weekend.setForeground(QColor("#8995a5"));
+    weekend.setForeground(QColor("#66758a"));
     setWeekdayTextFormat(Qt::Saturday, weekend);
     setWeekdayTextFormat(Qt::Sunday, weekend);
 }
@@ -239,6 +262,17 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     }
     QCalendarWidget::paintCell(p, r, d);
     const qreal scale = widgetScale(this);
+    // The view's outline is off in style.qss; mark the keyboard position on the selected day.
+    auto table = findChild<QAbstractItemView *>();
+    if (d == selectedDate() && table && table->hasFocus()) {
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        p->setPen(QPen(QColor("#456d98"), 2 * scale));
+        p->setBrush(Qt::NoBrush);
+        p->drawRoundedRect(QRectF(r).adjusted(2 * scale, 2 * scale, -2 * scale, -2 * scale), 4 * scale,
+                           4 * scale);
+        p->restore();
+    }
     const QRect area(qRound(r.x() / scale), qRound(r.y() / scale), qRound(r.width() / scale),
                      qRound(r.height() / scale));
     QList<Item> hits;
@@ -267,7 +301,7 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
         QFont font = p->font();
         font.setPointSize(7);
         p->setFont(font);
-        p->setPen(foregroundColor(this, QColor("#737e91")));
+        p->setPen(foregroundColor(this, QColor("#5f6b7c")));
         p->drawText(QRect(left + shown * 8, area.bottom() - 14, 25, 14), Qt::AlignVCenter,
                     "+" + QString::number(hits.size() - shown));
     }
@@ -385,7 +419,7 @@ Controller::Controller(Store &s, const QString &path, bool test)
         pix.fill(Qt::transparent);
         QPainter p(&pix);
         p.setRenderHint(QPainter::Antialiasing);
-        p.setBrush(QColor("#557da9"));
+        p.setBrush(QColor("#4a7099"));
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(1, 1, 30, 30, 8, 8);
         p.setPen(Qt::white);
@@ -525,12 +559,14 @@ void Controller::buildFloating() {
         h->addWidget(more);
         lv->addLayout(h);
         list = new TaskList;
+        list->setAccessibleName(s + "事项");
         bindList(list);
         lv->addWidget(list);
     };
     section("置顶", pins, pinMore);
     lv->addWidget(heading("Task"));
     tasks = new TaskList;
+    tasks->setAccessibleName("任务");
     tasks->setFixedHeight(5 * ROW_HEIGHT);
     bindList(tasks);
     lv->addWidget(tasks);
@@ -548,6 +584,7 @@ void Controller::buildFloating() {
     floatCal = new Calendar;
     cv->addWidget(floatCal);
     floatDay = new TaskList;
+    floatDay->setAccessibleName("选中日期的事项");
     floatDay->setFixedHeight(4 * ROW_HEIGHT);
     bindList(floatDay);
     cv->addWidget(floatDay);
@@ -696,6 +733,7 @@ void Controller::buildManager() {
     lv->addWidget(heading("全部事项 · 点击编辑，拖动改期"));
     search = new QLineEdit;
     search->setPlaceholderText("搜索事项…");
+    search->setAccessibleName("搜索事项");
     lv->addWidget(search);
     showHistory = new QCheckBox("显示历史已完成事项");
     lv->addWidget(showHistory);
@@ -706,6 +744,7 @@ void Controller::buildManager() {
         updateLists();
     });
     all = new TaskList;
+    all->setAccessibleName("全部事项");
     bindList(all);
     lv->addWidget(all, 1);
     lv->addWidget(quickBar("新建 Task（无日期）", [this](QString t) { guard([&] { add(t); }); }));
@@ -727,6 +766,7 @@ void Controller::buildManager() {
     dh->addWidget(dateAdd);
     rv->addLayout(dh);
     dayItems = new TaskList;
+    dayItems->setAccessibleName("选中日期的事项");
     dayItems->setMinimumHeight(60);
     dayItems->setMaximumHeight(108);
     bindList(dayItems);
@@ -1809,10 +1849,10 @@ void Controller::applyFloatingAppearance() {
     floating->backgroundOpacity = qBound(0, settings.value("opacity", 100).toInt(), 100) / 100.0;
     floating->setProperty("surfaceOpacity", floating->backgroundOpacity);
     floating->setProperty("foregroundOpacity",
-                          qBound(0, settings.value("textOpacity", 100).toInt(), 100) / 100.0);
+                          qBound(MIN_TEXT_OPACITY, settings.value("textOpacity", 100).toInt(), 100) / 100.0);
     for (int weekday = 1; weekday <= 7; ++weekday) {
         QTextCharFormat format;
-        format.setForeground(foregroundColor(floatCal, QColor(weekday >= 6 ? "#8995a5" : "#293448")));
+        format.setForeground(foregroundColor(floatCal, QColor(weekday >= 6 ? "#66758a" : "#293448")));
         floatCal->setWeekdayTextFormat(Qt::DayOfWeek(weekday), format);
     }
     auto headerFormat = floatCal->headerTextFormat();
@@ -2155,16 +2195,20 @@ void Controller::draftSmokeTest(const QString &dir) {
     require(qAbs(transparent.pixelColor(5, floating->height() / 2).alpha() - 51) <= 1,
             "floating background pixels actually contain the configured alpha");
     transparent.save(dir + "/floating-background-20-text-100.png");
-    settings.setValue("textOpacity", 35);
+    settings.setValue("textOpacity", 0);
+    applyFloatingAppearance();
+    require(qAbs(foregroundColor(tasks, QColor("#293448")).alphaF() - MIN_TEXT_OPACITY / 100.0) < .01,
+            "text opacity below the floor is clamped");
+    settings.setValue("textOpacity", 45);
     applyFloatingAppearance();
     require(qAbs(floating->backgroundOpacity - .2) < .01 &&
-                qAbs(foregroundColor(tasks, QColor("#293448")).alphaF() - .35) < .01 &&
+                qAbs(foregroundColor(tasks, QColor("#293448")).alphaF() - .45) < .01 &&
                 floating->styleSheet() != backgroundStyle &&
                 foregroundColor(all, QColor("#293448")).alpha() == 255,
             "text transparency changes independently of background and manager");
-    require(qAbs(floatCal->weekdayTextFormat(Qt::Saturday).foreground().color().alphaF() - .35) < .01,
+    require(qAbs(floatCal->weekdayTextFormat(Qt::Saturday).foreground().color().alphaF() - .45) < .01,
             "calendar weekend text follows foreground opacity");
-    floating->grab().save(dir + "/floating-background-20-text-35.png");
+    floating->grab().save(dir + "/floating-background-20-text-45.png");
     settingsDialog();
     auto background = settingsWindow->findChild<QSlider *>("setting_opacity");
     auto text = settingsWindow->findChild<QSlider *>("setting_textOpacity");

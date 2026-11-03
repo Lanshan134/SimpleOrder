@@ -58,6 +58,9 @@ inline QWidget *editorField(const QString &label, QWidget *input) {
     v->setAlignment(Qt::AlignTop);
     auto caption = new QLabel(label);
     caption->setObjectName("heading");
+    caption->setBuddy(input);
+    if (input->accessibleName().isEmpty())
+        input->setAccessibleName(label);
     v->addWidget(caption);
     v->addWidget(input);
     box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);

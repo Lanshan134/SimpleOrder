@@ -4,6 +4,8 @@
 #include <QtWidgets>
 #include <functional>
 
+// Floating text opacity floor (percent); also clamps older settings files.
+constexpr int MIN_TEXT_OPACITY = 40;
 QColor groupColor(const QString &group);
 QString groupName(const QString &group);
 class SettingsDialog;

@@ -88,14 +88,15 @@ class ToggleSwitch : public QCheckBox {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
-        p.setBrush(isEnabled() ? (isChecked() ? QColor("#557da9") : QColor("#cbd5e2")) : QColor("#e4e8ee"));
-        p.drawRoundedRect(QRectF(1, 2, 36, 20), 10, 10);
+        // The off track needs 3:1 against white to read as a control.
+        p.setBrush(isEnabled() ? (isChecked() ? QColor("#4a7099") : QColor("#808ea3")) : QColor("#e4e8ee"));
+        p.drawRoundedRect(QRectF(2, 3, 34, 18), 9, 9);
         p.setBrush(Qt::white);
-        p.drawEllipse(QRectF(isChecked() ? 19 : 3, 4, 16, 16));
+        p.drawEllipse(QRectF(isChecked() ? 19 : 5, 5, 14, 14));
         if (hasFocus()) {
-            p.setPen(QPen(QColor("#8ca9cd"), 1));
+            p.setPen(QPen(QColor("#456d98"), 2));
             p.setBrush(Qt::NoBrush);
-            p.drawRoundedRect(QRectF(.5, .5, 37, 23), 11, 11);
+            p.drawRoundedRect(QRectF(1, 1, 36, 22), 11, 11);
         }
     }
 };
@@ -139,13 +140,14 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
         "QDialog#settingsDialog {background:#f3f6fa;} QListWidget#settingsNavigation "
         "{background:#edf2f8;border:0;font-size:15px;} QListWidget#settingsNavigation::item {padding:12px "
         "15px;border-radius:7px;} QListWidget#settingsNavigation::item:selected "
-        "{background:#dbe7f5;color:#315f9b;} QLabel#settingsPageTitle {font-size:22px;font-weight:600;} "
-        "QLabel#settingsHint {font-size:12px;color:#7b8797;} QGroupBox {background:white;border:1px solid "
+        "{background:#dbe7f5;color:#315f9b;} QListWidget#settingsNavigation::item:focus {border:2px solid "
+        "#456d98;padding:10px 13px;} QLabel#settingsPageTitle {font-size:22px;font-weight:600;} "
+        "QLabel#settingsHint {font-size:12px;color:#5f6b7c;} QGroupBox {background:white;border:1px solid "
         "#e1e7f0;border-radius:10px;margin-top:14px;padding:14px 12px 10px;} QGroupBox::title "
-        "{subcontrol-origin:margin;left:13px;padding:0 4px;color:#60748e;font-size:13px;} QPushButton#danger "
+        "{subcontrol-origin:margin;left:13px;padding:0 4px;color:#5a6d86;font-size:13px;} QPushButton#danger "
         "{color:#b65353;} QTableWidget {background:white;border:1px solid "
         "#e1e7f0;border-radius:8px;gridline-color:#edf1f7;} QHeaderView::section "
-        "{background:#edf2f8;border:0;padding:8px;color:#72839a;}");
+        "{background:#edf2f8;border:0;padding:8px;color:#5f6b7c;}");
     auto root = new QHBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
     root->setSpacing(16);
@@ -293,6 +295,7 @@ void SettingsDialog::floatingPage() {
         slider->setObjectName("setting_" + key);
         slider->setRange(minimum, 100);
         slider->setValue(c.settings.value(key, 100).toInt());
+        slider->setAccessibleName(label);
         auto value = new QLabel(QString::number(slider->value()) + "%");
         row->addWidget(slider, 1);
         row->addWidget(value);
@@ -308,7 +311,8 @@ void SettingsDialog::floatingPage() {
         });
     };
     opacityControl("opacity", "窗口背景不透明度", 0);
-    opacityControl("textOpacity", "文字不透明度", 0);
+    // Below this the floating text, including the way back into settings, stops being legible.
+    opacityControl("textOpacity", "文字不透明度", MIN_TEXT_OPACITY);
     auto layout = section(p, "文字与布局");
     number(layout, "基础字号", "fontSize", 12, 22, 15, " px");
     toggle(layout, "随窗口大小缩放", "scaleWithWindow", true);
@@ -404,6 +408,7 @@ void SettingsDialog::populateTypes() {
         auto color = new QTableWidgetItem;
         color->setData(Qt::UserRole + 1, cat.color);
         color->setToolTip("选中该行后再次点击修改颜色");
+        color->setData(Qt::AccessibleTextRole, "颜色 " + cat.color);
         types->setItem(row, 0, color);
         auto name = new QTableWidgetItem(cat.name);
         name->setData(Qt::UserRole, cat.id);
@@ -412,6 +417,7 @@ void SettingsDialog::populateTypes() {
         types->setItem(row, 1, name);
         auto more = new QTableWidgetItem("⋯");
         more->setTextAlignment(Qt::AlignCenter);
+        more->setData(Qt::AccessibleTextRole, "更多操作");
         more->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         types->setItem(row, 2, more);
         color->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
@@ -428,6 +434,7 @@ void SettingsDialog::addType() {
     types->setRowHeight(row, 44);
     auto color = new QTableWidgetItem;
     color->setData(Qt::UserRole + 1, "#6b97c6");
+    color->setData(Qt::AccessibleTextRole, "颜色 #6b97c6");
     color->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     types->setItem(row, 0, color);
     auto name = new QTableWidgetItem;
@@ -436,6 +443,7 @@ void SettingsDialog::addType() {
     types->setItem(row, 1, name);
     auto more = new QTableWidgetItem("⋯");
     more->setTextAlignment(Qt::AlignCenter);
+    more->setData(Qt::AccessibleTextRole, "更多操作");
     more->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     types->setItem(row, 2, more);
     types->setCurrentCell(row, 1);
@@ -522,6 +530,7 @@ void SettingsDialog::chooseTypeColor(const QString &id) {
                     break;
                 }
             types->item(row, 0)->setData(Qt::UserRole + 1, color);
+            types->item(row, 0)->setData(Qt::AccessibleTextRole, "颜色 " + color);
             saved->setText("颜色已保存");
         });
     });
