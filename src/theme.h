@@ -10,33 +10,30 @@
 namespace theme {
 inline const QHash<QString, QString> &tokens() {
     static const QHash<QString, QString> values{
-        {"ink", "#293448"},          // primary text
-        {"ink-muted", "#5f6b7c"},    // secondary text, headings, details
-        {"ink-soft", "#66758a"},     // placeholders, weekends
-        {"ink-control", "#5b687a"},  // text buttons, combo arrow
-        {"ink-tab", "#56657c"},      // inactive tabs and choices
-        {"ink-group", "#5a6d86"},    // group box titles
-        {"ink-disabled", "#a6adba"}, // disabled text (exempt from contrast)
-        {"accent", "#4a7099"},       // primary buttons, checked states
-        {"accent-hover", "#3f6189"},
-        {"accent-ink", "#315f9b"},   // accent text on light tints
-        {"focus", "#456d98"},        // focus rings
-        {"danger", "#b65353"},
-        {"control-border", "#808ea3"},
-        {"control-off", "#e4e8ee"},  // disabled switch track
-        {"line", "#e1e7f0"},         // panel and card borders
-        {"line-strong", "#d8e1ec"},  // tab and header rules
+        {"ink", "#1f2328"},          // primary text
+        {"ink-muted", "#5f6670"},    // secondary text, headings, details
+        {"ink-soft", "#6b7280"},     // placeholders, weekends
+        {"ink-control", "#4b5360"},  // text buttons
+        {"ink-disabled", "#a8aeb8"}, // disabled text (exempt from contrast)
+        {"ink-outside", "#aab0ba"},  // other months' calendar dates (exempt from contrast)
+        {"accent", "#2563eb"},       // today, selection, checked states, primary action
+        {"accent-hover", "#1d4fd8"},
+        {"accent-ink", "#1d4ed8"},   // accent text on light tints
+        {"focus", "#2563eb"},        // focus rings
+        {"danger", "#c53030"},       // overdue dates and destructive actions only
+        {"control-border", "#7e8591"}, // 3:1 on surface, canvas, row-hover and selection
+        {"control-off", "#e3e5e9"},  // disabled switch track and primary button
+        {"line", "#e6e8ec"},         // hairlines between regions
+        {"line-strong", "#d9dce1"},  // menus and popups
         {"surface", "#ffffff"},
-        {"canvas", "#edf0f4"},       // manager background
-        {"panel", "#f7f9fc"},        // sub-panels, dialogs
-        {"tint", "#edf2f8"},         // navigation, headers, quiet chips
-        {"tint-strong", "#e8edf4"},  // inactive editor tabs
-        {"hover", "#eaf1fb"},
-        {"row-hover", "#f4f7fb"},
-        {"pressed", "#d6e4f4"},
-        {"selection", "#dce8f6"},
-        {"track", "#f1f4f8"},        // scrollbar track
-        {"handle", "#c3ccd8"},       // scrollbar handle
+        {"canvas", "#f4f5f7"},       // list pane, settings navigation, status line
+        {"tint", "#f1f3f5"},         // quiet chips and previews
+        {"hover", "#eceef1"},        // buttons
+        {"row-hover", "#e9ebef"},    // list rows, visible on both canvas and surface
+        {"pressed", "#e0e3e8"},
+        {"selection", "#e0eafd"},
+        {"handle", "#c4c8cf"},       // scrollbar handle
+        {"handle-hover", "#9ea4ae"},
     };
     return values;
 }
@@ -64,15 +61,20 @@ inline QString resolve(const QString &style) {
     }
     return out + style.mid(position);
 }
+// Font sizes follow the factor, and so does any length written with the "tx" unit
+// (controls that must keep pace with the text beside them, such as check indicators).
 inline QString scaleText(const QString &style, qreal factor = textScale) {
-    static const QRegularExpression size("(font-size\\s*:\\s*)([0-9]+)px");
+    static const QRegularExpression size("(font-size\\s*:\\s*|\\b)([0-9]+)(px|tx)");
     QString out;
     int position = 0;
     auto matches = size.globalMatch(style);
     while (matches.hasNext()) {
         auto match = matches.next();
-        out += style.mid(position, match.capturedStart() - position) + match.captured(1) +
-               QString::number(qRound(match.captured(2).toInt() * factor)) + "px";
+        out += style.mid(position, match.capturedStart() - position);
+        if (match.captured(3) == "px" && match.captured(1).isEmpty())
+            out += match.captured(0);
+        else
+            out += match.captured(1) + QString::number(qRound(match.captured(2).toInt() * factor)) + "px";
         position = match.capturedEnd();
     }
     return out + style.mid(position);

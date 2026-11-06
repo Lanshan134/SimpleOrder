@@ -22,6 +22,8 @@ class TaskList : public QListWidget {
     std::function<void(qint64)> edit, contextEdit, complete, togglePin;
     QMenu *createItemMenu(qint64 id);
     explicit TaskList(QWidget *parent = nullptr);
+    QSize sizeHint() const override;
+    void snapToRows();
     void fill(const QList<Item> &items, bool headings = false);
     void setPreviewOnly(bool enabled);
 
@@ -31,6 +33,8 @@ class TaskList : public QListWidget {
         QListWidget::mousePressEvent(event);
     }
     void startDrag(Qt::DropActions) override;
+    void paintEvent(QPaintEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
     void wheelEvent(QWheelEvent *) override;
     void contextMenuEvent(QContextMenuEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
@@ -44,9 +48,11 @@ class Calendar : public QCalendarWidget {
     int retentionHours = 48, maxDots = 3;
     QList<Item> items;
     std::function<void(qint64, QDate)> schedule;
+    QPushButton *titleButton = nullptr, *todayButton = nullptr;
     explicit Calendar(QWidget *parent = nullptr);
     void repaintCells() {
         updateCells();
+        updateHeader();
     }
 
   protected:
@@ -54,8 +60,14 @@ class Calendar : public QCalendarWidget {
     void paintCell(QPainter *, const QRect &, const QDate &) const override;
     void dragEnterEvent(QDragEnterEvent *) override;
     void dragMoveEvent(QDragMoveEvent *) override;
+    void dragLeaveEvent(QDragLeaveEvent *) override;
     void dropEvent(QDropEvent *) override;
     QDate dateAt(const QPoint &p) const;
+
+  private:
+    QDate hoverDate, dropDate;
+    void updateHeader();
+    void chooseMonth();
 };
 class Window : public QWidget {
     QPoint dragOffset;
@@ -99,8 +111,16 @@ class Controller : public QObject {
     QWidget *editorHeader = nullptr;
     QCheckBox *showHistory = nullptr;
     Calendar *cal = nullptr, *floatCal = nullptr;
-    QLabel *dateLabel = nullptr, *status = nullptr;
+    QLabel *dateLabel = nullptr, *status = nullptr, *floatDate = nullptr, *pinHeading = nullptr,
+           *taskHeading = nullptr, *planHeading = nullptr;
     QWidget *editor = nullptr;
+    // The editor panel in the manager opens only while an item is being edited.
+    QSplitter *managerSplit = nullptr;
+    QFrame *inspector = nullptr;
+    QPushButton *closeEditorButton = nullptr;
+    void openEditor();
+    void closeEditor();
+    void scaleManager();
     QLineEdit *search = nullptr, *title = nullptr, *date = nullptr, *time = nullptr;
     QComboBox *group = nullptr, *type = nullptr, *timeKind = nullptr;
     QCheckBox *pinned = nullptr, *done = nullptr, *showCalendar = nullptr;

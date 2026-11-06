@@ -110,7 +110,7 @@ void validatePlan(const Item &i) {
         auto value = i.rule.value(key).toString();
         if (!value.isEmpty() &&
             (!from(i.rule, key).isValid() || from(i.rule, key).toString(Qt::ISODate) != value))
-            invalid("计划日期格式应为 YYYY-MM-DD");
+            invalid("计划日期应写成 2026-11-05 这样的格式");
     }
     auto start = from(i.rule, kind(i) == "interval" ? "first" : "start"), end = from(i.rule, "end");
     if (start.isValid() && end.isValid() && start > end)

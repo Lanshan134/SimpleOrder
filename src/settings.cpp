@@ -60,7 +60,7 @@ class TypeDelegate : public QStyledItemDelegate {
             model->setData(index, input->text().trimmed());
     }
     void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
-        if (index.column() != 0) {
+        if (index.column() == 1) {
             QStyledItemDelegate::paint(p, option, index);
             return;
         }
@@ -68,8 +68,16 @@ class TypeDelegate : public QStyledItemDelegate {
         p->fillRect(option.rect, theme::color(option.state & QStyle::State_Selected ? "selection" : "surface"));
         p->setRenderHint(QPainter::Antialiasing);
         p->setPen(Qt::NoPen);
-        p->setBrush(QColor(index.data(Qt::UserRole + 1).toString()));
-        p->drawEllipse(QPointF(option.rect.center()), 6, 6);
+        const QPointF centre = QRectF(option.rect).center();
+        if (index.column() == 0) {
+            p->setBrush(QColor(index.data(Qt::UserRole + 1).toString()));
+            p->drawEllipse(centre, 6, 6);
+        } else {
+            // The actions menu marker, drawn like the other icons rather than set as a text character.
+            p->setBrush(theme::color("ink-muted"));
+            for (int dot : {-5, 0, 5})
+                p->drawEllipse(centre + QPointF(dot, 0), 1.5, 1.5);
+        }
         p->restore();
     }
 };
@@ -109,6 +117,8 @@ QLabel *hint(const QString &text) {
 QPushButton *action(const QString &text) {
     auto b = new QPushButton(text);
     b->setCursor(Qt::PointingHandCursor);
+    // Form rows would otherwise stretch an action across the whole page.
+    b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     return b;
 }
 QStringList keysForPage(int page) {
@@ -137,33 +147,47 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
     if (c.testing)
         setAttribute(Qt::WA_DontShowOnScreen);
     setStyleSheet(theme::style(
-        "QDialog#settingsDialog {background:@panel;}"
+        "QDialog#settingsDialog {background:@surface;}"
         "QStackedWidget QScrollArea > QWidget > QWidget {background:transparent;}"
-        "QListWidget#settingsNavigation {background:@tint;border:0;font-size:15px;}"
-        "QListWidget#settingsNavigation::item {padding:12px 15px;border-radius:7px;}"
+        "QFrame#settingsSide {background:@canvas;border-right:1px solid @line;}"
+        "QListWidget#settingsNavigation {background:transparent;border:0;font-size:14px;}"
+        "QListWidget#settingsNavigation::item {padding:8px 10px;border-radius:6px;}"
+        "QListWidget#settingsNavigation::item:hover {background:@row-hover;}"
         "QListWidget#settingsNavigation::item:selected {background:@selection;color:@accent-ink;}"
-        "QListWidget#settingsNavigation::item:focus {border:2px solid @focus;padding:10px 13px;}"
-        "QLabel#settingsPageTitle {font-size:22px;font-weight:600;}"
-        "QLabel#settingsHint {font-size:12px;color:@ink-muted;}"
-        "QGroupBox {background:@surface;border:1px solid @line;border-radius:10px;margin-top:14px;"
-        "padding:14px 12px 10px;}"
-        "QGroupBox::title {subcontrol-origin:margin;left:13px;padding:0 4px;color:@ink-group;font-size:13px;}"
-        "QPushButton#danger {color:@danger;}"
-        "QTableWidget {background:@surface;border:1px solid @line;border-radius:8px;gridline-color:@tint;}"
-        "QHeaderView::section {background:@tint;border:0;padding:8px;color:@ink-muted;}"));
+        "QListWidget#settingsNavigation::item:focus {border:2px solid @focus;padding:6px 8px;}"
+        "QLabel#settingsPageTitle {font-size:20px;font-weight:600;}"
+        "QLabel#settingsHint {font-size:13px;color:@ink-muted;}"
+        "QGroupBox {background:transparent;border:0;border-top:1px solid @line;margin-top:38px;padding:0;"
+        "font-size:14px;}"
+        "QGroupBox::title {subcontrol-origin:margin;subcontrol-position:top left;left:-2px;top:12px;padding:0;"
+        "color:@ink;font-size:14px;font-weight:600;}"
+        "QDialog#settingsDialog QGroupBox QPushButton {border:1px solid @control-border;background:@surface;"
+        "color:@ink;padding:4px 12px;}"
+        "QDialog#settingsDialog QGroupBox QPushButton:hover {background:@hover;}"
+        "QDialog#settingsDialog QGroupBox QPushButton:focus {border:2px solid @focus;padding:3px 11px;}"
+        "QDialog#settingsDialog QGroupBox QPushButton#danger {color:@danger;border-color:@danger;}"
+        "QTableWidget {background:@surface;border:1px solid @line;border-radius:6px;font-size:14px;"
+        "selection-background-color:@selection;selection-color:@ink;outline:0;}"
+        "QHeaderView::section {background:@canvas;border:0;border-bottom:1px solid @line;padding:6px 2px;"
+        "color:@ink-muted;font-size:13px;}"));
     auto root = new QHBoxLayout(this);
-    root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(16);
-    auto left = new QVBoxLayout;
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+    auto side = new QFrame;
+    side->setObjectName("settingsSide");
+    auto left = new QVBoxLayout(side);
+    left->setContentsMargins(8, 12, 8, 12);
     navigation = new QListWidget;
     navigation->setObjectName("settingsNavigation");
-    navigation->setFixedWidth(150);
+    navigation->setFixedWidth(148);
     navigation->addItems({"悬浮窗", "类型", "事项与显示", "日历", "启动与操作", "数据与备份"});
     left->addWidget(navigation, 1);
     auto about = action("关于与帮助");
     left->addWidget(about);
-    root->addLayout(left);
+    root->addWidget(side);
     auto right = new QVBoxLayout;
+    right->setContentsMargins(20, 16, 20, 12);
+    right->setSpacing(10);
     pages = new QStackedWidget;
     right->addWidget(pages, 1);
     auto footer = new QHBoxLayout;
@@ -183,6 +207,12 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
     startupPage();
     dataPage();
     aboutPage();
+    // One label width across sections, so every page's controls start on the same line.
+    for (auto form : findChildren<QFormLayout *>())
+        for (int row = 0; row < form->rowCount(); ++row)
+            if (auto item = form->itemAt(row, QFormLayout::LabelRole))
+                if (auto label = item->widget())
+                    label->setMinimumWidth(qRound(160 * theme::textScale));
     connect(navigation, &QListWidget::currentRowChanged, this, [this](int row) {
         if (row < 0)
             return;
@@ -202,8 +232,8 @@ SettingsDialog::SettingsDialog(Controller &controller, QWidget *parent) : QDialo
 QWidget *SettingsDialog::page(const QString &title, const QString &description) {
     auto content = new QWidget;
     auto layout = new QVBoxLayout(content);
-    layout->setContentsMargins(1, 0, 8, 8);
-    layout->setSpacing(12);
+    layout->setContentsMargins(1, 0, 12, 8);
+    layout->setSpacing(4);
     auto label = new QLabel(title);
     label->setObjectName("settingsPageTitle");
     layout->addWidget(label);
@@ -219,9 +249,10 @@ QWidget *SettingsDialog::page(const QString &title, const QString &description) 
 QFormLayout *SettingsDialog::section(QWidget *parent, const QString &name) {
     auto box = new QGroupBox(name);
     auto form = new QFormLayout(box);
-    form->setContentsMargins(14, 20, 14, 12);
-    form->setVerticalSpacing(14);
-    form->setHorizontalSpacing(22);
+    form->setContentsMargins(0, 12, 0, 4);
+    form->setVerticalSpacing(10);
+    form->setHorizontalSpacing(24);
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     auto layout = static_cast<QVBoxLayout *>(parent->layout());
     layout->insertWidget(layout->count() - 1, box);
@@ -273,10 +304,12 @@ QSpinBox *SettingsDialog::number(QFormLayout *form, const QString &label, const 
 QComboBox *SettingsDialog::choices(QFormLayout *form, const QString &label, const QString &key,
                                    const QList<QPair<QString, QVariant>> &options, QVariant fallback) {
     auto box = new QComboBox;
+    useListPopup(box);
     box->setObjectName("setting_" + key);
     for (auto v : options)
         box->addItem(v.first, v.second);
     box->setCurrentIndex(qMax(0, box->findData(c.settings.value(key, fallback))));
+    box->setMaximumWidth(280);
     form->addRow(label, box);
     readers[key] = [this, key, fallback, box] {
         QSignalBlocker b(box);
@@ -339,7 +372,8 @@ void SettingsDialog::typePage() {
     auto p = page("类型设置", "首次点击选中整行，再次点击名称直接编辑。删除类型时可选择事项转移位置。");
     auto form = section(p, "自定义类型");
     auto toolbar = new QHBoxLayout;
-    auto add = action("＋ 新增类型"), up = action("↑ 上移"), down = action("↓ 下移");
+    toolbar->setSpacing(6);
+    auto add = action("新增类型"), up = action("上移"), down = action("下移");
     toolbar->addWidget(add);
     toolbar->addStretch();
     toolbar->addWidget(up);
@@ -349,11 +383,17 @@ void SettingsDialog::typePage() {
     types = table;
     types->setObjectName("typesTable");
     types->setHorizontalHeaderLabels({"颜色", "名称", "操作"});
+    // Each header sits over its column: the dot and the actions are centred, names start at the left.
+    types->horizontalHeaderItem(0)->setTextAlignment(Qt::AlignCenter);
+    types->horizontalHeaderItem(2)->setTextAlignment(Qt::AlignCenter);
     types->verticalHeader()->hide();
     types->setSelectionBehavior(QAbstractItemView::SelectRows);
     types->setSelectionMode(QAbstractItemView::SingleSelection);
     types->setEditTriggers(QAbstractItemView::NoEditTriggers);
     types->setMinimumHeight(230);
+    types->setShowGrid(false);
+    types->horizontalHeader()->setHighlightSections(false);
+    types->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     types->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     types->setColumnWidth(0, 68);
     types->setColumnWidth(2, 65);
@@ -380,7 +420,9 @@ void SettingsDialog::typePage() {
     form->addRow(types);
     auto defaults = section(p, "添加默认值");
     defaultType = new QComboBox;
+    useListPopup(defaultType);
     defaultType->setObjectName("setting_defaultType");
+    defaultType->setMaximumWidth(280);
     defaults->addRow("新事项默认类型", defaultType);
     populateTypes();
     connect(defaultType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] {
@@ -408,7 +450,7 @@ void SettingsDialog::populateTypes() {
     for (auto cat : c.store.categories()) {
         int row = types->rowCount();
         types->insertRow(row);
-        types->setRowHeight(row, 44);
+        types->setRowHeight(row, 36);
         auto color = new QTableWidgetItem;
         color->setData(Qt::UserRole + 1, cat.color);
         color->setToolTip("选中该行后再次点击修改颜色");
@@ -419,8 +461,7 @@ void SettingsDialog::populateTypes() {
         name->setFlags(name->flags() | Qt::ItemIsEditable);
         name->setToolTip("选中该行后再次点击名称，或按 F2");
         types->setItem(row, 1, name);
-        auto more = new QTableWidgetItem("⋯");
-        more->setTextAlignment(Qt::AlignCenter);
+        auto more = new QTableWidgetItem;
         more->setData(Qt::AccessibleTextRole, "更多操作");
         more->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         types->setItem(row, 2, more);
@@ -435,7 +476,7 @@ void SettingsDialog::addType() {
     const QString id = "type_" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     int row = types->rowCount();
     types->insertRow(row);
-    types->setRowHeight(row, 44);
+    types->setRowHeight(row, 36);
     auto color = new QTableWidgetItem;
     color->setData(Qt::UserRole + 1, "#6b97c6");
     color->setData(Qt::AccessibleTextRole, "颜色 #6b97c6");
@@ -445,8 +486,7 @@ void SettingsDialog::addType() {
     name->setData(Qt::UserRole, id);
     name->setFlags(name->flags() | Qt::ItemIsEditable);
     types->setItem(row, 1, name);
-    auto more = new QTableWidgetItem("⋯");
-    more->setTextAlignment(Qt::AlignCenter);
+    auto more = new QTableWidgetItem;
     more->setData(Qt::AccessibleTextRole, "更多操作");
     more->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     types->setItem(row, 2, more);
@@ -477,7 +517,8 @@ bool SettingsDialog::saveTypeName(const QString &id, const QString &name) {
     }
 }
 void SettingsDialog::activateTypeCell(int row, int column, bool alreadySelected) {
-    if (!alreadySelected)
+    // The actions marker opens on its first click; the other cells select first.
+    if (!alreadySelected && column != 2)
         return;
     auto item = types->item(row, 1);
     if (!item)
@@ -490,6 +531,8 @@ void SettingsDialog::activateTypeCell(int row, int column, bool alreadySelected)
         chooseTypeColor(id);
     else if (column == 2) {
         QMenu menu;
+        if (c.testing)
+            menu.setAttribute(Qt::WA_DontShowOnScreen);
         menu.addAction("重命名", [this, row] {
             types->setCurrentCell(row, 1);
             types->editItem(types->item(row, 1));
@@ -560,6 +603,7 @@ void SettingsDialog::deleteType() {
     QVBoxLayout root(&dialog);
     root.addWidget(hint("该类型下的事项会转移到你选择的类型，不会删除事项。"));
     auto destination = new QComboBox;
+    useListPopup(destination);
     for (auto cat : c.store.categories())
         if (cat.id != id)
             destination->addItem(cat.name, cat.id);
@@ -687,7 +731,7 @@ void SettingsDialog::startupPage() {
 void SettingsDialog::dataPage() {
     auto p = page("数据与备份", "备份包含事项、完成时间和类型配置。导入前会保留原数据备份。");
     auto location = section(p, "本地数据");
-    auto path = new QLineEdit(QFileInfo(c.settings.fileName()).absolutePath());
+    auto path = new QLineEdit(QDir::toNativeSeparators(QFileInfo(c.settings.fileName()).absolutePath()));
     path->setReadOnly(true);
     path->setCursorPosition(0);
     path->setToolTip(path->text());
@@ -698,11 +742,13 @@ void SettingsDialog::dataPage() {
             [this, path] { QDesktopServices::openUrl(QUrl::fromLocalFile(path->text())); });
     auto manual = section(p, "导入与导出");
     auto row = new QHBoxLayout;
+    row->setSpacing(6);
     auto exportButton = action("导出备份"), importButton = action("导入数据"),
          restoreButton = action("恢复备份");
     row->addWidget(exportButton);
     row->addWidget(importButton);
     row->addWidget(restoreButton);
+    row->addStretch();
     manual->addRow(row);
     connect(exportButton, &QPushButton::clicked, this, [this] {
         auto path = QFileDialog::getSaveFileName(this, "导出备份",
@@ -721,30 +767,31 @@ void SettingsDialog::dataPage() {
     choices(automatic, "备份频率", "backupFrequency",
             {{"关闭", "off"}, {"每天", "daily"}, {"每周", "weekly"}}, "off");
     number(automatic, "保留最新备份", "backupKeep", 1, 30, 7, " 份");
-    auto directory = new QLineEdit(
+    auto directory = new QLineEdit(QDir::toNativeSeparators(
         c.settings.value("backupDirectory", QFileInfo(c.settings.fileName()).absolutePath() + "/backups")
-            .toString());
+            .toString()));
     directory->setReadOnly(true);
     directory->setCursorPosition(0);
     directory->setToolTip(directory->text());
     auto folder = action("更改");
     auto folderRow = new QHBoxLayout;
+    folderRow->setSpacing(6);
     folderRow->addWidget(directory, 1);
     folderRow->addWidget(folder);
     automatic->addRow("备份目录", folderRow);
     readers["backupDirectory"] = [this, directory] {
-        directory->setText(
+        directory->setText(QDir::toNativeSeparators(
             c.settings.value("backupDirectory", QFileInfo(c.settings.fileName()).absolutePath() + "/backups")
-                .toString());
+                .toString()));
         directory->setCursorPosition(0);
         directory->setToolTip(directory->text());
     };
     connect(folder, &QPushButton::clicked, this, [this, directory] {
         auto path = QFileDialog::getExistingDirectory(this, "备份目录", directory->text());
         if (!path.isEmpty()) {
-            directory->setText(path);
+            directory->setText(QDir::toNativeSeparators(path));
             directory->setCursorPosition(0);
-            directory->setToolTip(path);
+            directory->setToolTip(directory->text());
             commit("backupDirectory", path);
         }
     });
@@ -826,8 +873,9 @@ void SettingsDialog::aboutPage() {
     auto help = section(p, "常用操作");
     help->addRow(hint("列表内：Enter 编辑事项，空格完成或记录进度。"));
     help->addRow(hint("• 拖动悬浮窗标题移动，拖动右下角调整大小。\n• "
-                      "点击事项名称编辑，右键可置顶或取消置顶。\n• 选中日期后，在右侧表单填写详细新事项。\n• "
-                      "对号记录完成；计划按目标次数累计。\n• 修改详情后请保存，再切换事项。"));
+                      "点击事项名称编辑，右键可置顶或取消置顶。\n• "
+                      "选中日期后，点击“添加到此日期”填写详细新事项。\n• "
+                      "点击事项左侧圆圈记录完成；计划按目标次数累计。\n• 修改详情后请保存，再切换事项。"));
 }
 void SettingsDialog::resetPage() {
     auto keys = keysForPage(pages->currentIndex());
@@ -1111,8 +1159,16 @@ bool Controller::settingsSmokeTest(const QString &directory) {
     pump();
     require(groupColor(renameId) == QColor("#228855"), "color changes preserve inline name");
     dialog.types->clearSelection();
+    bool actionsOpened = false;
+    QTimer::singleShot(0, &dialog, [&] {
+        if (auto popup = QApplication::activePopupWidget()) {
+            actionsOpened = true;
+            popup->close();
+        }
+    });
     clickCell(0, 2);
-    require(QApplication::activePopupWidget() == nullptr, "first operation click only selects");
+    require(actionsOpened && QApplication::activePopupWidget() == nullptr,
+            "actions marker opens its menu on the first click");
     dialog.navigation->setCurrentRow(0);
     auto font = dialog.findChild<QSpinBox *>("setting_fontSize");
     auto rows = dialog.findChild<QSpinBox *>("setting_taskRows");
@@ -1123,8 +1179,9 @@ bool Controller::settingsSmokeTest(const QString &directory) {
     scaling->setChecked(false);
     floating->resize(630, 720);
     QApplication::processEvents();
-    require(tasks->font().pixelSize() == 20 && tasks->maximumHeight() == 320 && tasks->height() <= 320,
-            "settings change floating font and visible rows");
+    require(tasks->font().pixelSize() == 20 && tasks->sizeHint().height() == 320 &&
+                tasks->viewport()->height() >= 40 && tasks->viewport()->height() % 40 == 0,
+            "settings change the preferred row count while available space keeps whole rows");
     // Resetting only the floating page leaves unrelated preferences untouched.
     settings.setValue("retentionHours", 72);
     dialog.navigation->setCurrentRow(0);
