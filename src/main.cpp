@@ -2,10 +2,60 @@
 #include "ui.h"
 #include <iostream>
 
+namespace {
+// Qt's own strings (standard buttons, text menus, the colour picker) stay in Chinese
+// without deploying Qt's translation files.
+class QtTextTranslator : public QTranslator {
+  public:
+    using QTranslator::QTranslator;
+    bool isEmpty() const override {
+        return false;
+    }
+    QString translate(const char *, const char *source, const char *, int) const override {
+        static const QHash<QString, QString> text{
+            {"OK", "确定"},
+            {"Cancel", "取消"},
+            {"Save", "保存"},
+            {"Discard", "不保存"},
+            {"Close", "关闭"},
+            {"&Yes", "是"},
+            {"&No", "否"},
+            {"Yes", "是"},
+            {"No", "否"},
+            {"&Undo", "撤销"},
+            {"&Redo", "重做"},
+            {"Cu&t", "剪切"},
+            {"&Copy", "复制"},
+            {"&Paste", "粘贴"},
+            {"Delete", "删除"},
+            {"Select All", "全选"},
+            {"Hu&e:", "色相："},
+            {"&Sat:", "饱和度："},
+            {"&Val:", "明度："},
+            {"&Red:", "红："},
+            {"&Green:", "绿："},
+            {"Bl&ue:", "蓝："},
+            {"A&lpha channel:", "透明度："},
+            {"&HTML:", "色值："},
+            {"&Basic colors", "基本颜色"},
+            {"&Custom colors", "自定义颜色"},
+            {"&Add to Custom Colors", "添加到自定义颜色"},
+            {"&Pick Screen Color", "拾取屏幕颜色"},
+            {"Select Color", "选择颜色"},
+        };
+        return text.value(QString::fromUtf8(source));
+    }
+};
+} // namespace
+
 int main(int argc, char **argv) {
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
     QApplication app(argc, argv);
+    // Month, weekday and day names follow the Chinese interface, not the machine's locale.
+    QLocale::setDefault(QLocale(QLocale::Chinese, QLocale::China));
+    QtTextTranslator qtText;
+    app.installTranslator(&qtText);
     app.setApplicationName("LightTask");
     app.setOrganizationName("LightTaskLocal");
     // Resolve the legacy storage path before adopting the new application identity.

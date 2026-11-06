@@ -2,6 +2,7 @@
 namespace {
 QComboBox *combo(const QStringList &labels, const QStringList &values) {
     auto box = new QComboBox;
+    useListPopup(box);
     for (int n = 0; n < labels.size(); ++n)
         box->addItem(labels[n], values[n]);
     return box;
@@ -46,6 +47,7 @@ PlanEditor::PlanEditor(QWidget *parent) : QWidget(parent) {
     modeTabs->addTab("按周");
     modeTabs->addTab("按月");
     modeTabs->setExpanding(false);
+    modeTabs->setDrawBase(false);
     d->addWidget(modeTabs, 0, Qt::AlignLeft);
     connect(modeTabs, &QTabBar::currentChanged, dateMode, &QComboBox::setCurrentIndex);
     connect(dateMode, QOverload<int>::of(&QComboBox::currentIndexChanged), modeTabs,
@@ -92,8 +94,9 @@ PlanEditor::PlanEditor(QWidget *parent) : QWidget(parent) {
     basis = combo({"固定日期", "完成后顺延"}, {"fixed", "after"});
     in->addWidget(new EditorRow(editorField("重复间隔", interval), editorField("计算方式", basis)));
     first = new QLineEdit(QDate::currentDate().toString(Qt::ISODate));
-    first->setPlaceholderText("YYYY-MM-DD");
-    first->setClearButtonEnabled(true);
+    first->setPlaceholderText("如 2026-11-05");
+    addClearButton(first);
+    attachDatePicker(first);
 
     pages->addWidget(intervals);
 
@@ -108,15 +111,16 @@ PlanEditor::PlanEditor(QWidget *parent) : QWidget(parent) {
     end = new QLineEdit;
     clock = new QLineEdit;
     for (auto date : {start, end}) {
-        date->setPlaceholderText("不限（YYYY-MM-DD）");
-        date->setClearButtonEnabled(true);
+        date->setPlaceholderText("不限，如 2026-11-05");
+        addClearButton(date);
+        attachDatePicker(date);
     }
     startPages = new QStackedWidget;
     startPages->addWidget(editorField("开始日期", start));
     startPages->addWidget(editorField("首次日期（必填）", first));
     root->addWidget(new EditorRow(startPages, editorField("结束日期", end)));
-    clock->setPlaceholderText("HH:mm（留空表示不指定）");
-    clock->setClearButtonEnabled(true);
+    clock->setPlaceholderText("如 14:30，留空表示不指定");
+    addClearButton(clock);
     clockBox = new EditorRow(editorField("时间（可选）", clock), nullptr);
     root->addWidget(clockBox);
     dateHint = new QLabel;
@@ -257,7 +261,7 @@ void PlanEditor::updateView() {
                 candidate = earliest;
             for (int n = 0; n < 3660; ++n, candidate = candidate.addDays(1))
                 if (planOccurs(sample, candidate)) {
-                    text += " · 下次：" + candidate.toString("yyyy-MM-dd ddd");
+                    text += " · 下次：" + QLocale().toString(candidate, "yyyy-MM-dd ddd");
                     break;
                 }
         }

@@ -1,7 +1,9 @@
 <!DOCTYPE RCC>
-<!-- Combo and spin arrows for style.qss; colours are the ink-control and ink-disabled tokens. -->
+<!-- Combo and spin arrows and the checkbox tick for style.qss. -->
 <RCC version="1.0">
     <qresource prefix="/theme">
+        <file>check.png</file>
+        <file>check@2x.png</file>
         <file>chevron-down.png</file>
         <file>chevron-down@2x.png</file>
         <file>chevron-down-disabled.png</file>
