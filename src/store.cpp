@@ -122,10 +122,10 @@ Item Store::save(Item i) {
         fail("完成时间无效");
     if (!i.date.isEmpty() && (!QDate::fromString(i.date, Qt::ISODate).isValid() ||
                               QDate::fromString(i.date, Qt::ISODate).toString(Qt::ISODate) != i.date))
-        fail("日期格式应为 YYYY-MM-DD");
+        fail("日期应写成 2026-11-05 这样的格式");
     if (!i.time.isEmpty() && (!QTime::fromString(i.time, "HH:mm").isValid() ||
                               QTime::fromString(i.time, "HH:mm").toString("HH:mm") != i.time))
-        fail("时间格式应为 HH:mm");
+        fail("时间应写成 14:30 这样的格式");
     if (!QStringList{"start", "due"}.contains(i.timeKind))
         fail("时间语义无效");
     if (i.target < 1 || i.target > 9999 || i.progress < 0 || i.progress > i.target)
