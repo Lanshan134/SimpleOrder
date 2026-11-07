@@ -97,6 +97,7 @@ class Controller : public QObject {
     friend class SettingsDialog;
     Store &store;
     QSettings settings;
+    const bool systemStartupEnabled;
     bool testing = false, refreshing = false, pinExpand = false, planExpand = false, dirty = false,
          calendarView = false;
     qint64 selected = 0;
@@ -187,7 +188,7 @@ class Controller : public QObject {
     void guard(const std::function<void()> &);
 
   public:
-    Controller(Store &, const QString &settingsPath, bool testing = false);
+    Controller(Store &, const QString &settingsPath, bool testing = false, bool separateData = false);
     ~Controller();
     void show();
     void setTop(bool);

@@ -746,8 +746,9 @@ void Calendar::dropEvent(QDropEvent *e) {
     }
 }
 
-Controller::Controller(Store &s, const QString &path, bool test)
-    : store(s), settings(path, QSettings::IniFormat), testing(test) {
+Controller::Controller(Store &s, const QString &path, bool test, bool separateData)
+    : store(s), settings(path, QSettings::IniFormat), systemStartupEnabled(!test && !separateData),
+      testing(test) {
     reloadCategories();
     buildFloating();
     buildManager();

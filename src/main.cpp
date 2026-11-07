@@ -63,7 +63,20 @@ int main(int argc, char **argv) {
     app.setApplicationName("SimpleOrder");
     app.setApplicationDisplayName("简序 · SimpleOrder");
     app.setApplicationVersion("2.1.0");
-    bool test = app.arguments().contains("--self-test");
+    QCommandLineParser options;
+    options.addOption({"self-test", "Run the isolated regression checks."});
+    options.addOption({"data-dir", "Use a separate database and settings directory.", "directory"});
+    if (!options.parse(app.arguments()) || !options.positionalArguments().isEmpty()) {
+        std::cerr << (options.errorText().isEmpty() ? "Unexpected positional arguments."
+                                                   : qPrintable(options.errorText())) << std::endl;
+        return 2;
+    }
+    const bool test = options.isSet("self-test");
+    const bool separateData = options.isSet("data-dir");
+    if (separateData && (test || options.value("data-dir").trimmed().isEmpty())) {
+        std::cerr << "--data-dir requires a directory and cannot be used with --self-test." << std::endl;
+        return 2;
+    }
     // Self-tests assert exact metrics, so they ignore the machine's text size.
     theme::textScale = test ? 1.0 : theme::systemTextScale();
     app.setFont(QFont("Microsoft YaHei UI", qRound(11 * theme::textScale)));
@@ -81,8 +94,11 @@ int main(int argc, char **argv) {
         dataDir = QDir::currentPath() + "/test-results/run-" +
                   QDateTime::currentDateTime().toString("yyyyMMdd-HHmmsszzz");
     } else
-        dataDir = existingDataDir;
-    QDir().mkpath(dataDir);
+        dataDir = separateData ? QDir(options.value("data-dir")).absolutePath() : existingDataDir;
+    if (dataDir.isEmpty() || !QDir().mkpath(dataDir)) {
+        std::cerr << "Cannot create the application data directory." << std::endl;
+        return 2;
+    }
     QLockFile lock(dataDir + "/app.lock");
     if (!test && !lock.tryLock(100)) {
         QMessageBox::information(nullptr, "简序", "已有一个简序实例正在运行，请检查任务栏或系统托盘。");
@@ -92,7 +108,7 @@ int main(int argc, char **argv) {
         Store store(dataDir + "/tasks.sqlite");
         if (!QFile::exists(dataDir + "/settings.ini"))
             store.seed();
-        Controller controller(store, dataDir + "/settings.ini", test);
+        Controller controller(store, dataDir + "/settings.ini", test, separateData);
         if (test) {
             bool ok = controller.smokeTest(dataDir);
             QFile report(dataDir + "/result.txt");

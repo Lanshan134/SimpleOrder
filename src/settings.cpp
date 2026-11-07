@@ -691,15 +691,17 @@ void SettingsDialog::startupPage() {
     autoStart->setObjectName("setting_autostart");
     start->addRow("登录 Windows 后启动", autoStart);
 #ifdef Q_OS_WIN
-    if (!c.testing) {
+    if (c.systemStartupEnabled) {
         QSettings run("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                       QSettings::NativeFormat);
         // Retain the legacy registry key so renaming does not create duplicate startup entries.
         autoStart->setChecked(run.contains("LightTaskLocal"));
-    } else
+    } else {
         autoStart->setEnabled(false);
+        autoStart->setToolTip("独立数据模式不修改 Windows 启动项。");
+    }
     connect(autoStart, &QCheckBox::toggled, this, [this, autoStart](bool on) {
-        if (c.testing)
+        if (!c.systemStartupEnabled)
             return;
         QSettings run("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                       QSettings::NativeFormat);
