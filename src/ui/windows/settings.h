@@ -1,5 +1,8 @@
 #pragma once
-#include "ui.h"
+#include <QtWidgets>
+#include <functional>
+
+class Controller;
 
 class SettingsDialog : public QDialog {
     friend class Controller;

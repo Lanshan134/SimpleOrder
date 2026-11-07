@@ -1,18 +1,8 @@
 #pragma once
-#include <QtWidgets>
+#include "domain/entryparser.h"
+#include <QPlainTextEdit>
 #include <functional>
 
-struct EntrySpan {
-    int start, length;
-};
-struct ParsedEntry {
-    QString title, error;
-    QDate date;
-    QTime time;
-    QList<EntrySpan> spans;
-};
-ParsedEntry parseEntry(const QString &text, const QDate &today = QDate::currentDate());
-void smartEntryParserTests();
 class SmartEntry : public QPlainTextEdit {
     Q_OBJECT
     std::function<bool(const QString &)> submit;

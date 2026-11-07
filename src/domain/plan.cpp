@@ -1,4 +1,5 @@
-#include "store.h"
+#include "domain/item.h"
+#include <stdexcept>
 
 namespace {
 QString kind(const Item &i) {

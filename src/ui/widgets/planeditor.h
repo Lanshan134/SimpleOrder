@@ -1,7 +1,8 @@
 #pragma once
 #include "editorwidgets.h"
-#include "store.h"
+#include "domain/item.h"
 #include <QtWidgets>
+#include <functional>
 
 class PlanEditor : public QWidget {
     QComboBox *ruleType, *period, *dateMode, *missing, *basis;

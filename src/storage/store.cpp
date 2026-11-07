@@ -3,14 +3,6 @@
 static void fail(const QString &s) {
     throw std::runtime_error(s.toUtf8().constData());
 }
-bool visibleInActive(const Item &item, const QDateTime &now, int retentionHours) {
-    if (!item.done)
-        return true;
-    if (retentionHours < 0)
-        return true;
-    const auto at = QDateTime::fromString(item.completedAt, Qt::ISODateWithMs);
-    return at.isValid() && at.secsTo(now) < qint64(retentionHours) * 60 * 60;
-}
 void Store::run(const QString &sql) {
     QSqlQuery q(db);
     if (!q.exec(sql))

@@ -25,7 +25,7 @@ if ($LASTEXITCODE -ne 0) { throw "qmake failed ($LASTEXITCODE)" }
 & $make -C $buildDir -j4
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)" }
 
-Copy-Item -LiteralPath (Join-Path $buildDir 'SimpleOrder.exe'), (Join-Path $root 'style.qss') -Destination $runDir
+Copy-Item -LiteralPath (Join-Path $buildDir 'SimpleOrder.exe'), (Join-Path $root 'src/ui/theme/style.qss') -Destination $runDir
 foreach ($dll in @('Qt5Core.dll', 'Qt5Gui.dll', 'Qt5Sql.dll', 'Qt5Widgets.dll')) {
     Copy-Item -LiteralPath (Join-Path $QtRoot "bin/$dll") -Destination $runDir
 }

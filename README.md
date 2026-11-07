@@ -44,7 +44,7 @@ git switch --track origin/beta
 
 ## 环境与构建
 
-已验证：Windows、Qt 5.15.2、MinGW 8.1.0 x64、C++17。Qt 与编译器必须使用兼容套件。仓库不含 SDK、编译器、运行库或构建产物。
+开发环境使用 Windows、Qt 5.15.2、MinGW/GDB 8.1 x64 和 C++17。在 VS Code 中打开仓库根目录，按 **Ctrl+Shift+B** 构建调试版，按 **F5** 启动调试。工具链配置与数据隔离见 [开发指南](docs/development.md)。
 
 克隆后安装 Qt 和 MinGW，在项目根目录运行（路径按本机安装位置填写）：
 
@@ -55,7 +55,7 @@ git switch --track origin/beta
 
 `build.cmd` 是原生 CMD 入口，无需修改 PowerShell 执行策略。中文路径使用临时英文目录联接构建；中间文件位于 `build/`，可运行目录位于 `outputs/SimpleOrder/`。
 
-无参数构建使用开发机默认路径：Qt 为项目下 `work/qt/5.15.2/mingw81_64`，MinGW 为 `D:/CodeApp/Environment/mingw64/bin`。其他机器须传入上述两个参数。VS Code 的 `Ctrl+Shift+B` 使用无参数构建并运行；请按本机环境在 `.vscode/tasks.json` 的构建任务参数中补上 Qt、MinGW 路径。重新编译前先退出运行中的程序。
+使用 VS Code 的 **SimpleOrder: Release** 任务构建可运行程序，输出位于 `outputs/SimpleOrder/`。重新编译前先退出对应构建的运行实例。
 
 也可使用 CMake：
 
@@ -64,7 +64,7 @@ cmake -S . -B build/cmake -G "MinGW Makefiles" -DCMAKE_PREFIX_PATH=C:/Qt/5.15.2/
 cmake --build build/cmake
 ```
 
-使用 CMake 时 MinGW 须在 PATH 中；运行前还需要部署 Qt DLL、插件与 `style.qss`。现有 `build.cmd` 已包含这些部署步骤。
+使用 CMake 时 MinGW 须在 PATH 中。CMake 会复制样式表，运行前还需要提供 Qt DLL 和插件。qmake 构建脚本包含运行库部署。
 
 ## 验证
 
@@ -81,14 +81,16 @@ if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 
 | 路径 | 用途 |
 |---|---|
-| `src/` | Qt 界面、计划规则、SQLite 存储与自检逻辑 |
-| `style.qss` | 应用样式 |
+| `src/app/` | 程序入口与操作协调 |
+| `src/domain/` | 任务模型、计划规则与文本解析 |
+| `src/storage/` | SQLite、数据迁移与备份 |
+| `src/ui/` | 窗口、控件、主题与样式 |
 | `taskmanager.pro` / `CMakeLists.txt` | 构建配置 |
-| `.vscode/tasks.json` | 共享 VS Code 构建任务 |
-| `tests/` | 自检启动脚本 |
+| `.vscode/` | 共享构建、调试与代码导航配置 |
+| `tools/`、`tests/` | 构建部署脚本和隔离自检 |
 | `docs/` | 编辑窗口设计与交互说明 |
 | `licenses/` / `THIRD_PARTY_NOTICES.md` | 已有第三方许可文本和说明 |
-| `work/`、`build/`、`outputs/`、`test-results/` | 本地目录，不提交 Git |
+| `.local/`、`build/`、`outputs/`、`test-results/` | 本机工具链、构建与测试输出 |
 
 ## 数据
 

@@ -1,5 +1,4 @@
-#include "theme.h"
-#include "ui.h"
+#include "app/controller.h"
 #include <iostream>
 
 namespace {

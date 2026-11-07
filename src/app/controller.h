@@ -1,98 +1,15 @@
 #pragma once
-#include "planeditor.h"
-#include "smartentry.h"
-#include "store.h"
-#include "theme.h"
+#include "storage/store.h"
+#include "ui/theme/appearance.h"
+#include "ui/widgets/calendar.h"
+#include "ui/widgets/planeditor.h"
+#include "ui/widgets/tasklist.h"
+#include "ui/windows/window.h"
 #include <QtWidgets>
 #include <functional>
 
-// Floating text opacity floor (percent); also clamps older settings files.
-constexpr int MIN_TEXT_OPACITY = 40;
-// Floating window sizes at 100% text; Windows text size enlarges them so scaled text still fits.
-inline QSize floatingSize(int width, int height) {
-    return QSize(qRound(width * theme::textScale), qRound(height * theme::textScale));
-}
-QColor groupColor(const QString &group);
-QString groupName(const QString &group);
 class SettingsDialog;
-class TaskList : public QListWidget {
-    Qt::MouseButton pressedButton = Qt::LeftButton;
 
-  public:
-    std::function<void(qint64)> edit, contextEdit, complete, togglePin;
-    QMenu *createItemMenu(qint64 id);
-    explicit TaskList(QWidget *parent = nullptr);
-    QSize sizeHint() const override;
-    void snapToRows();
-    void fill(const QList<Item> &items, bool headings = false);
-    void setPreviewOnly(bool enabled);
-
-  protected:
-    void mousePressEvent(QMouseEvent *event) override {
-        pressedButton = event->button();
-        QListWidget::mousePressEvent(event);
-    }
-    void startDrag(Qt::DropActions) override;
-    void paintEvent(QPaintEvent *) override;
-    void resizeEvent(QResizeEvent *) override;
-    void wheelEvent(QWheelEvent *) override;
-    void contextMenuEvent(QContextMenuEvent *) override;
-    void keyPressEvent(QKeyEvent *) override;
-};
-class Calendar : public QCalendarWidget {
-  public:
-    bool showCompleted = true, displayOutside = true;
-    bool previewOnly = false;
-    bool mouseDateSelection = false;
-    std::function<void(bool)> dateGesture;
-    int retentionHours = 48, maxDots = 3;
-    QList<Item> items;
-    std::function<void(qint64, QDate)> schedule;
-    QPushButton *titleButton = nullptr, *todayButton = nullptr;
-    explicit Calendar(QWidget *parent = nullptr);
-    void repaintCells() {
-        updateCells();
-        updateHeader();
-    }
-
-  protected:
-    bool eventFilter(QObject *, QEvent *) override;
-    void paintCell(QPainter *, const QRect &, const QDate &) const override;
-    void dragEnterEvent(QDragEnterEvent *) override;
-    void dragMoveEvent(QDragMoveEvent *) override;
-    void dragLeaveEvent(QDragLeaveEvent *) override;
-    void dropEvent(QDropEvent *) override;
-    QDate dateAt(const QPoint &p) const;
-
-  private:
-    QDate hoverDate, dropDate;
-    void updateHeader();
-    void chooseMonth();
-};
-class Window : public QWidget {
-    QPoint dragOffset;
-    bool dragging = false;
-
-  public:
-    bool customSurface = false;
-    qreal backgroundOpacity = 1.0;
-    std::function<void()> onResize;
-    void setDragHandle(QWidget *handle);
-    std::function<void()> onClose;
-    explicit Window(Qt::WindowFlags flags = Qt::Window) : QWidget(nullptr, flags) {}
-
-  protected:
-    bool eventFilter(QObject *, QEvent *) override;
-    void paintEvent(QPaintEvent *) override;
-    void resizeEvent(QResizeEvent *event) override;
-    void closeEvent(QCloseEvent *e) override {
-        if (onClose) {
-            e->ignore();
-            onClose();
-        } else
-            QWidget::closeEvent(e);
-    }
-};
 class Controller : public QObject {
     friend class SettingsDialog;
     Store &store;
