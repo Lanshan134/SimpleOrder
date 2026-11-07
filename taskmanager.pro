@@ -1,7 +1,7 @@
 QT += widgets sql
 CONFIG += c++17
 TARGET = SimpleOrder
-VERSION = 2.1.0
+VERSION = 2.0.0
 INCLUDEPATH += $$PWD/src
 
 SOURCES += \

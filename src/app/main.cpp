@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     const auto existingDataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     app.setApplicationName("SimpleOrder");
     app.setApplicationDisplayName("简序 · SimpleOrder");
-    app.setApplicationVersion("2.1.0");
+    app.setApplicationVersion("2.0.0");
     QCommandLineParser options;
     options.addOption({"self-test", "Run the isolated regression checks."});
     options.addOption({"data-dir", "Use a separate database and settings directory.", "directory"});
