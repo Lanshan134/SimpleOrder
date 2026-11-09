@@ -1,14 +1,24 @@
 #pragma once
 #include <QtWidgets>
 
+// Defined in ui.cpp: buttons inside a line edit that clear it or open a calendar popover.
+// They replace QLineEdit's action buttons, which Qt paints at a fixed size whatever the text size.
+void addClearButton(QLineEdit *edit);
+void attachDatePicker(QLineEdit *edit);
+// A list view lets style.qss reach the popup's rows.
+inline void useListPopup(QComboBox *box) {
+    box->setView(new QListView(box));
+}
+
 // Two short fields share a row until the available width calls for stacking.
 class EditorRow : public QWidget {
+    static constexpr int STACK_WIDTH = 340;
     QGridLayout *grid;
     QWidget *left, *right;
     bool stacked = false;
     bool secondVisible = true;
     void reflow() {
-        bool narrow = width() < 480;
+        bool narrow = width() < STACK_WIDTH;
         grid->removeWidget(left);
         if (right)
             grid->removeWidget(right);
@@ -29,7 +39,7 @@ class EditorRow : public QWidget {
     }
     void resizeEvent(QResizeEvent *event) override {
         QWidget::resizeEvent(event);
-        if (stacked != (width() < 480))
+        if (stacked != (width() < STACK_WIDTH))
             reflow();
     }
     void changeEvent(QEvent *event) override {
@@ -65,6 +75,7 @@ inline QWidget *editorField(const QString &label, QWidget *input) {
     v->setAlignment(Qt::AlignTop);
     auto caption = new QLabel(label);
     caption->setObjectName("heading");
+    caption->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     caption->setBuddy(input);
     if (input->accessibleName().isEmpty())
         input->setAccessibleName(label);
