@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "调试简序",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/bin/SimpleOrder.exe",
+      "args": [
+        "--data-dir",
+        "${workspaceFolder}/build/debug/data"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "SimpleOrder: Debug",
+      "MIMode": "gdb",
+      "miDebuggerPath": "${workspaceFolder}/.local/mingw/bin/gdb.exe",
+      "externalConsole": false,
+      "environment": [
+        {
+          "name": "QT_QPA_PLATFORM",
+          "value": "windows"
+        }
+      ]
+    },
+    {
+      "name": "调试隔离自检",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/bin/SimpleOrder.exe",
+      "args": [
+        "--self-test"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "SimpleOrder: Debug",
+      "MIMode": "gdb",
+      "miDebuggerPath": "${workspaceFolder}/.local/mingw/bin/gdb.exe",
+      "externalConsole": false,
+      "environment": [
+        {
+          "name": "QT_QPA_PLATFORM",
+          "value": "windows"
+        }
+      ]
+    }
+  ]
+}

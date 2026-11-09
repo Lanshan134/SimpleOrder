@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw 'qmake 失败' }
 if ($LASTEXITCODE -ne 0) { throw '编译失败' }
 New-Item -ItemType Directory -Force "$PSScriptRoot/outputs/SimpleOrder" | Out-Null
 Copy-Item "$PSScriptRoot/build/release/SimpleOrder.exe" "$PSScriptRoot/outputs/SimpleOrder/SimpleOrder.exe"
-Copy-Item "$PSScriptRoot/style.qss" "$PSScriptRoot/outputs/SimpleOrder/style.qss"
+Copy-Item "$PSScriptRoot/src/ui/theme/style.qss" "$PSScriptRoot/outputs/SimpleOrder/style.qss"
 foreach ($name in @('Qt5Core.dll','Qt5Gui.dll','Qt5Sql.dll','Qt5Widgets.dll')) {
     Copy-Item "$QtRoot/bin/$name" "$PSScriptRoot/outputs/SimpleOrder/"
 }
