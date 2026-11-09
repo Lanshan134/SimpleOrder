@@ -1,10 +1,11 @@
 #pragma once
 #include <QtWidgets>
+#include <functional>
 
 // Defined in widgettools.cpp: buttons inside a line edit that clear it or open a calendar popover.
 // They replace QLineEdit's action buttons, which Qt paints at a fixed size whatever the text size.
 void addClearButton(QLineEdit *edit);
-void attachDatePicker(QLineEdit *edit);
+void attachDatePicker(QLineEdit *edit, std::function<void()> onDateSelected = {});
 // A list view lets style.qss reach the popup's rows.
 inline void useListPopup(QComboBox *box) {
     box->setView(new QListView(box));

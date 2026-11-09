@@ -390,6 +390,8 @@ bool Controller::smokeTest(const QString &dir) {
     const auto keptDate = date->text();
     require(clearDate && pickDate && !clearDate->isHidden() && !pickDate->isHidden() && pickDate->width() == 20,
             "date field shows its clear and calendar buttons");
+    require((clearDate->focusPolicy() & Qt::TabFocus) && (pickDate->focusPolicy() & Qt::TabFocus),
+            "field buttons are reachable with Tab");
     clearDate->click();
     require(date->text().isEmpty() && clearDate->isHidden() && !pickDate->isHidden(),
             "clear button empties the field and steps aside");
@@ -406,6 +408,28 @@ bool Controller::smokeTest(const QString &dir) {
     require(date->text() == pickedDate.toString(Qt::ISODate) && !clearDate->isHidden() &&
                 QApplication::activePopupWidget() == nullptr,
             "picking a day fills the field and closes the picker");
+
+    const auto pickedTitle = QStringLiteral("检查选定日期 明天");
+    title->setText(pickedTitle);
+    require(!parseEditorTitle() && date->text() == pickedDate.toString(Qt::ISODate) &&
+                title->text() == pickedTitle && !title->property("entryError").toString().isEmpty(),
+            "smart entry preserves a conflicting date chosen with the picker");
+    QToolTip::hideText();
+    QKeyEvent spaceDown(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+    QKeyEvent spaceUp(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+    QApplication::sendEvent(pickDate, &spaceDown);
+    QApplication::sendEvent(pickDate, &spaceUp);
+    popup = QApplication::activePopupWidget();
+    require(popup && popup->objectName() == "datePopup", "Space opens the date picker");
+    pickerCalendar = popup->findChild<Calendar *>();
+    const QDate keyboardDate = pickedDate.addDays(1);
+    pickerCalendar->setSelectedDate(keyboardDate);
+    auto calendarGrid = pickerCalendar->findChild<QAbstractItemView *>();
+    require(calendarGrid, "date picker exposes its keyboard grid");
+    QKeyEvent confirmDate(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+    QApplication::sendEvent(calendarGrid, &confirmDate);
+    require(date->text() == keyboardDate.toString(Qt::ISODate) && !QApplication::activePopupWidget(),
+            "Enter chooses the selected date and closes the picker");
     date->setText(keptDate);
     dirty = false;
     fillEditor();

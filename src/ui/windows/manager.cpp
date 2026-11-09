@@ -149,7 +149,7 @@ void Controller::buildManager() {
     form->addWidget(taskDates);
     addClearButton(date);
     addClearButton(time);
-    attachDatePicker(date);
+    attachDatePicker(date, [this] { dateManuallyEdited = true; });
     form->addWidget(planEditor);
     target = planEditor->totalTarget;
     // Completion belongs to the list. Keep the backing controls for compatibility.

@@ -70,7 +70,7 @@ class FieldButton : public QAbstractButton {
         setAccessibleName(label);
         setToolTip(label);
         setCursor(Qt::PointingHandCursor);
-        setFocusPolicy(Qt::NoFocus);
+        setFocusPolicy(Qt::TabFocus);
         setAttribute(Qt::WA_Hover);
     }
 
@@ -83,6 +83,11 @@ class FieldButton : public QAbstractButton {
             p.setPen(Qt::NoPen);
             p.setBrush(theme::color("hover"));
             p.drawRoundedRect(QRectF(rect()), 4 * unit, 4 * unit);
+        }
+        if (hasFocus()) {
+            p.setPen(QPen(theme::color("focus"), 1.5 * unit));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), 4 * unit, 4 * unit);
         }
         p.translate(QRectF(rect()).center());
         p.scale(unit, unit);
@@ -202,10 +207,10 @@ void addClearButton(QLineEdit *edit) {
     });
     fieldLayout(edit)->arrange();
 }
-void attachDatePicker(QLineEdit *edit) {
+void attachDatePicker(QLineEdit *edit, std::function<void()> onDateSelected) {
     auto picker = new FieldButton(true, "选择日期", edit);
     fieldLayout(edit)->arrange();
-    QObject::connect(picker, &QAbstractButton::clicked, edit, [edit] {
+    QObject::connect(picker, &QAbstractButton::clicked, edit, [edit, onDateSelected] {
         auto popup = new QFrame(edit, Qt::Popup);
         popup->setObjectName("datePopup");
         popup->setAttribute(Qt::WA_DeleteOnClose);
@@ -217,11 +222,16 @@ void attachDatePicker(QLineEdit *edit) {
         layout->addWidget(calendar);
         const QDate current = QDate::fromString(edit->text().trimmed(), Qt::ISODate);
         calendar->setSelectedDate(current.isValid() ? current : QDate::currentDate());
-        const auto pick = [edit, popup](QDate d) {
+        const auto pick = [edit, popup, onDateSelected](QDate d) {
+            if (!popup->isVisible())
+                return;
             edit->setText(d.toString(Qt::ISODate));
+            if (onDateSelected)
+                onDateSelected();
             popup->close();
         };
         QObject::connect(calendar, &QCalendarWidget::clicked, popup, pick);
+        QObject::connect(calendar, &QCalendarWidget::activated, popup, pick);
         QObject::connect(calendar->todayButton, &QPushButton::clicked, popup,
                          [pick] { pick(QDate::currentDate()); });
         popup->adjustSize();
