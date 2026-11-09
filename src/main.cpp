@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     const auto existingDataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     app.setApplicationName("SimpleOrder");
     app.setApplicationDisplayName("简序 · SimpleOrder");
-    app.setApplicationVersion("0.2.0");
+    app.setApplicationVersion("0.3.0-beta.2");
     bool test = app.arguments().contains("--self-test");
     // Self-tests assert exact metrics, so they ignore the machine's text size.
     theme::textScale = test ? 1.0 : theme::systemTextScale();

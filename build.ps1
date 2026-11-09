@@ -19,18 +19,18 @@ if ((Test-Path -LiteralPath $localQt) -and ((Resolve-Path -LiteralPath $QtRoot).
 if ($LASTEXITCODE -ne 0) { throw 'qmake 失败' }
 & "$MinGWBin/mingw32-make.exe" -C "$alias/build" -j4
 if ($LASTEXITCODE -ne 0) { throw '编译失败' }
-New-Item -ItemType Directory -Force "$PSScriptRoot/outputs/SimpleOrder-v0.2" | Out-Null
-Copy-Item "$PSScriptRoot/build/release/SimpleOrder.exe" "$PSScriptRoot/outputs/SimpleOrder-v0.2/SimpleOrder.exe"
-Copy-Item "$PSScriptRoot/style.qss" "$PSScriptRoot/outputs/SimpleOrder-v0.2/style.qss"
+New-Item -ItemType Directory -Force "$PSScriptRoot/outputs/SimpleOrder" | Out-Null
+Copy-Item "$PSScriptRoot/build/release/SimpleOrder.exe" "$PSScriptRoot/outputs/SimpleOrder/SimpleOrder.exe"
+Copy-Item "$PSScriptRoot/style.qss" "$PSScriptRoot/outputs/SimpleOrder/style.qss"
 foreach ($name in @('Qt5Core.dll','Qt5Gui.dll','Qt5Sql.dll','Qt5Widgets.dll')) {
-    Copy-Item "$QtRoot/bin/$name" "$PSScriptRoot/outputs/SimpleOrder-v0.2/"
+    Copy-Item "$QtRoot/bin/$name" "$PSScriptRoot/outputs/SimpleOrder/"
 }
 foreach ($sub in @('platforms','sqldrivers','styles')) {
-    New-Item -ItemType Directory -Force "$PSScriptRoot/outputs/SimpleOrder-v0.2/$sub" | Out-Null
+    New-Item -ItemType Directory -Force "$PSScriptRoot/outputs/SimpleOrder/$sub" | Out-Null
 }
-foreach ($name in @('qwindows.dll','qoffscreen.dll')) { Copy-Item "$QtRoot/plugins/platforms/$name" "$PSScriptRoot/outputs/SimpleOrder-v0.2/platforms/" }
-Copy-Item "$QtRoot/plugins/sqldrivers/qsqlite.dll" "$PSScriptRoot/outputs/SimpleOrder-v0.2/sqldrivers/"
-Copy-Item "$QtRoot/plugins/styles/qwindowsvistastyle.dll" "$PSScriptRoot/outputs/SimpleOrder-v0.2/styles/"
-foreach ($name in @('libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll')) { Copy-Item "$MinGWBin/$name" "$PSScriptRoot/outputs/SimpleOrder-v0.2/" }
-Write-Host "编译完成：$PSScriptRoot/outputs/SimpleOrder-v0.2/SimpleOrder.exe"
+foreach ($name in @('qwindows.dll','qoffscreen.dll')) { Copy-Item "$QtRoot/plugins/platforms/$name" "$PSScriptRoot/outputs/SimpleOrder/platforms/" }
+Copy-Item "$QtRoot/plugins/sqldrivers/qsqlite.dll" "$PSScriptRoot/outputs/SimpleOrder/sqldrivers/"
+Copy-Item "$QtRoot/plugins/styles/qwindowsvistastyle.dll" "$PSScriptRoot/outputs/SimpleOrder/styles/"
+foreach ($name in @('libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll')) { Copy-Item "$MinGWBin/$name" "$PSScriptRoot/outputs/SimpleOrder/" }
+Write-Host "编译完成：$PSScriptRoot/outputs/SimpleOrder/SimpleOrder.exe"
 Write-Host "构建目录别名：$alias（仅指向源码目录的目录联接）"

@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
-project(SimpleOrder VERSION 0.2.0 LANGUAGES CXX)
+project(SimpleOrder VERSION 0.3.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOMOC ON)
 find_package(Qt5 5.15 REQUIRED COMPONENTS Widgets Sql)
-add_executable(SimpleOrder WIN32 src/main.cpp src/ui.cpp src/store.cpp src/settings.cpp src/plan.cpp src/planeditor.cpp
+add_executable(SimpleOrder WIN32 src/main.cpp src/ui.cpp src/store.cpp src/settings.cpp src/plan.cpp src/planeditor.cpp src/smartentry.cpp
  resources/theme.qrc)
 target_link_libraries(SimpleOrder PRIVATE Qt5::Widgets Qt5::Sql)
 if(MSVC)

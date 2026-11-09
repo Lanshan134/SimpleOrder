@@ -26,7 +26,7 @@ if not exist "%BUILD_ALIAS%\build" mkdir "%BUILD_ALIAS%\build"
 if errorlevel 1 goto failed
 "%MINGW_BIN%\mingw32-make.exe" -C "%BUILD_ALIAS%\build" -j4
 if errorlevel 1 goto failed
-set "APP_DIR=%BUILD_ALIAS%\outputs\SimpleOrder-v0.2"
+set "APP_DIR=%BUILD_ALIAS%\outputs\SimpleOrder"
 if not exist "%APP_DIR%" mkdir "%APP_DIR%"
 copy /Y "%BUILD_ALIAS%\build\release\SimpleOrder.exe" "%APP_DIR%\SimpleOrder.exe" >nul
 if errorlevel 1 goto failed
@@ -49,7 +49,7 @@ for %%F in (libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll) do (
     copy /Y "%MINGW_BIN%\%%F" "%APP_DIR%\%%F" >nul
     if errorlevel 1 goto failed
 )
-echo BUILD OK: outputs\SimpleOrder-v0.2\SimpleOrder.exe
+echo BUILD OK: outputs\SimpleOrder\SimpleOrder.exe
 exit /b 0
 :failed
 echo BUILD FAILED. If copying the EXE failed, exit the running app and retry.
