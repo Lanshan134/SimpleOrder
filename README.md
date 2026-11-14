@@ -2,15 +2,41 @@
 
 桌面一角，井然有序。
 
-Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前为 v0.2 源码开发版；本地 `outputs/` 中旧安装包不代表最新源码。
+Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当前源码版本为 2.0.0。版本内容见 [v2.0.0 版本说明](docs/release-v2.0.0.md)。
+
+## 下载试用版
+
+[下载 v0.3.0-beta.2 Windows x64 便携包](https://github.com/Lanshan134/SimpleOrder/releases/tag/v0.3.0-beta.2)。完整解压后运行 `SimpleOrder.exe`，不要单独移动 EXE。[版本说明](docs/release-v0.3.0-beta.2.md)。
+
+## 分支与协作
+
+[协作流程与验收约定](CONTRIBUTING.md) · [里程碑](https://github.com/Lanshan134/SimpleOrder/milestones)
+
+- `beta`：日常开发与试用分支，结构和功能可能变化。日常修改和功能 PR 以 `beta` 为目标。
+- `main`：稳定版本分支。`beta` 经过构建、自检及实际试用后，通过 PR 合并到 `main`，不直接把未验证的开发改动推入 `main`。
+- 两人同时开发时，从最新 `beta` 创建各自的 `feature/*` 或 `fix/*` 分支，再提交 PR 合并回 `beta`，避免共同推送同一功能分支。
+- 后续试用发布可使用 `v0.3.0-beta.2` 这样的版本标签；创建 `beta` 分支本身不表示已发布该版本。
+
+首次切换到远程开发分支：
+
+```powershell
+git fetch origin
+git switch --track origin/beta
+```
+
+已经有本地 `beta` 时执行 `git switch beta`。开始新工作前先确保当前修改已妥善保存，再用 `git pull --ff-only` 同步。
 
 ## 功能
+
+- 重设计界面：列表与日历两栏，编辑面板按需打开；完成圆圈在左侧、类型标记在右侧，日期支持相对显示。[整合记录与截图](docs/ui-redesign-merge.md)。
+- 悬浮任务列表按完整行利用剩余高度；配置行数为首选高度，快速添加固定在底部。
+- 智能录入：任务名称输入 `交报告 明天 18:00` 后回车填表；快速添加框识别日期时间并高亮，回车创建。[支持范围与冲突处理](docs/smart-entry.md)。
 
 - 悬浮任务列表与月历两种视图，无边框、置顶、尺寸缩放，背景与文字透明度独立设置。
 - 任务与计划使用独立表单；计划支持每天/周/月次数、指定星期或月日期、间隔重复、累计次数目标。
 - 已完成事项淡化并加删除线，默认 48 小时后隐藏，数据库记录保留。
 - 自定义类型名称、颜色和排序；任务实心点、计划空心点。
-- 日历拖放改期。编辑任务时点击日期修改日期草稿；计划有效期默认不限。
+- 日历拖放改期。已有任务须先激活日期框，再点击日历修改日期草稿；计划有效期默认不限。
 - 编辑窗口支持与其他窗口同时操作；切换窗口保留本次运行内草稿，切换其他事项时按实际改动询问保存。
 - 分类设置、JSON 导入导出、自动备份。详情需点击保存；快速添加、完成、置顶和拖放即时保存。
 
@@ -18,7 +44,7 @@ Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当
 
 ## 环境与构建
 
-已验证：Windows、Qt 5.15.2、MinGW 8.1.0 x64、C++17。Qt 与编译器必须使用兼容套件。仓库不含 SDK、编译器、运行库或构建产物。
+开发环境使用 Windows、Qt 5.15.2、MinGW/GDB 8.1 x64 和 C++17。在 VS Code 中打开仓库根目录，按 **Ctrl+Shift+B** 构建调试版，按 **F5** 启动调试。工具链配置与数据隔离见 [开发指南](docs/development.md)。
 
 克隆后安装 Qt 和 MinGW，在项目根目录运行（路径按本机安装位置填写）：
 
@@ -27,9 +53,9 @@ Windows 原生个人任务管理器，基于 C++17、Qt Widgets 和 SQLite。当
 .\run.cmd
 ```
 
-`build.cmd` 是原生 CMD 入口，无需修改 PowerShell 执行策略。中文路径使用临时英文目录联接构建；中间文件位于 `build/`，可运行目录位于 `outputs/SimpleOrder-v0.2/`。
+`build.cmd` 是原生 CMD 入口，无需修改 PowerShell 执行策略。中文路径使用临时英文目录联接构建；中间文件位于 `build/`，可运行目录位于 `outputs/SimpleOrder/`。
 
-无参数构建使用开发机默认路径：Qt 为项目下 `work/qt/5.15.2/mingw81_64`，MinGW 为 `D:/CodeApp/Environment/mingw64/bin`。其他机器须传入上述两个参数。VS Code 的 `Ctrl+Shift+B` 使用无参数构建并运行；请按本机环境在 `.vscode/tasks.json` 的构建任务参数中补上 Qt、MinGW 路径。重新编译前先退出运行中的程序。
+使用 VS Code 的 **SimpleOrder: Release** 任务构建可运行程序，输出位于 `outputs/SimpleOrder/`。重新编译前先退出对应构建的运行实例。
 
 也可使用 CMake：
 
@@ -38,14 +64,14 @@ cmake -S . -B build/cmake -G "MinGW Makefiles" -DCMAKE_PREFIX_PATH=C:/Qt/5.15.2/
 cmake --build build/cmake
 ```
 
-使用 CMake 时 MinGW 须在 PATH 中；运行前还需要部署 Qt DLL、插件与 `style.qss`。现有 `build.cmd` 已包含这些部署步骤。
+使用 CMake 时 MinGW 须在 PATH 中。CMake 会复制样式表，运行前还需要提供 Qt DLL 和插件。qmake 构建脚本包含运行库部署。
 
 ## 验证
 
 构建完成后，在项目根目录运行自检：
 
 ```powershell
-$testRun = Start-Process -FilePath .\outputs\SimpleOrder-v0.2\SimpleOrder.exe -ArgumentList '--self-test' -Wait -PassThru
+$testRun = Start-Process -FilePath .\outputs\SimpleOrder\SimpleOrder.exe -ArgumentList '--self-test' -Wait -PassThru
 if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 ```
 
@@ -55,14 +81,16 @@ if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 
 | 路径 | 用途 |
 |---|---|
-| `src/` | Qt 界面、计划规则、SQLite 存储与自检逻辑 |
-| `style.qss` | 应用样式 |
+| `src/app/` | 程序入口与操作协调 |
+| `src/domain/` | 任务模型、计划规则与文本解析 |
+| `src/storage/` | SQLite、数据迁移与备份 |
+| `src/ui/` | 窗口、控件、主题与样式 |
 | `taskmanager.pro` / `CMakeLists.txt` | 构建配置 |
-| `.vscode/tasks.json` | 共享 VS Code 构建任务 |
-| `tests/` | 自检启动脚本 |
+| `.vscode/` | 共享构建、调试与代码导航配置 |
+| `tools/`、`tests/` | 构建部署脚本和隔离自检 |
 | `docs/` | 编辑窗口设计与交互说明 |
 | `licenses/` / `THIRD_PARTY_NOTICES.md` | 已有第三方许可文本和说明 |
-| `work/`、`build/`、`outputs/`、`test-results/` | 本地目录，不提交 Git |
+| `.local/`、`build/`、`outputs/`、`test-results/` | 本机工具链、构建与测试输出 |
 
 ## 数据
 
@@ -71,6 +99,7 @@ if ($testRun.ExitCode -ne 0) { throw "Self-test failed: $($testRun.ExitCode)" }
 ## 文档
 
 - [编辑窗口设计与交互](docs/editor-design.md)
+- [后续开发需求清单](docs/backlog.md)
 - [历史更新记录](CHANGELOG.md)
 - [第三方组件说明](THIRD_PARTY_NOTICES.md)
 

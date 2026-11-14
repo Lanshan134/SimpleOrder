@@ -1,5 +1,6 @@
 # SDKs, builds, runtime distributions and test artifacts
 /work/
+/.local/
 /build/
 /outputs/
 /test-results/
@@ -39,6 +40,8 @@
 *.p12
 /.vscode/*
 !/.vscode/tasks.json
+!/.vscode/launch.json
+!/.vscode/c_cpp_properties.json
 /.vs/
 Thumbs.db
 .DS_Store

@@ -1,7 +1,8 @@
 # Third-party components
 
 This application dynamically links unmodified Qt 5.15.2 libraries: Qt Core, Gui, Widgets, Sql,
-the Windows platform/style plugins, SQLite driver, and an offscreen plugin used by tests.
+the Windows platform/style plugins, SQLite driver, an offscreen plugin used by tests,
+and the unmodified Qt ANGLE runtime libraries libEGL and libGLESv2 included in the portable package.
 Qt copyright belongs to The Qt Company Ltd. and its contributors. Qt is used under LGPL v3.
 Full LGPL v3 and GPL v3 texts are in `licenses/`.
 
