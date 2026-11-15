@@ -1,0 +1,136 @@
+#include "app/controller.h"
+#include <iostream>
+
+namespace {
+// Qt's own strings (standard buttons, text menus, the colour picker) stay in Chinese
+// without deploying Qt's translation files.
+class QtTextTranslator : public QTranslator {
+  public:
+    using QTranslator::QTranslator;
+    bool isEmpty() const override {
+        return false;
+    }
+    QString translate(const char *, const char *source, const char *, int) const override {
+        static const QHash<QString, QString> text{
+            {"OK", "确定"},
+            {"Cancel", "取消"},
+            {"Save", "保存"},
+            {"Discard", "不保存"},
+            {"Close", "关闭"},
+            {"&Yes", "是"},
+            {"&No", "否"},
+            {"Yes", "是"},
+            {"No", "否"},
+            {"&Undo", "撤销"},
+            {"&Redo", "重做"},
+            {"Cu&t", "剪切"},
+            {"&Copy", "复制"},
+            {"&Paste", "粘贴"},
+            {"Delete", "删除"},
+            {"Select All", "全选"},
+            {"Hu&e:", "色相："},
+            {"&Sat:", "饱和度："},
+            {"&Val:", "明度："},
+            {"&Red:", "红："},
+            {"&Green:", "绿："},
+            {"Bl&ue:", "蓝："},
+            {"A&lpha channel:", "透明度："},
+            {"&HTML:", "色值："},
+            {"&Basic colors", "基本颜色"},
+            {"&Custom colors", "自定义颜色"},
+            {"&Add to Custom Colors", "添加到自定义颜色"},
+            {"&Pick Screen Color", "拾取屏幕颜色"},
+            {"Select Color", "选择颜色"},
+        };
+        return text.value(QString::fromUtf8(source));
+    }
+};
+} // namespace
+
+int main(int argc, char **argv) {
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    QApplication app(argc, argv);
+    // Month, weekday and day names follow the Chinese interface, not the machine's locale.
+    QLocale::setDefault(QLocale(QLocale::Chinese, QLocale::China));
+    QtTextTranslator qtText;
+    app.installTranslator(&qtText);
+    app.setApplicationName("LightTask");
+    app.setOrganizationName("LightTaskLocal");
+    // Resolve the legacy storage path before adopting the new application identity.
+    const auto existingDataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    app.setApplicationName("SimpleOrder");
+    app.setApplicationDisplayName("简序 · SimpleOrder");
+    app.setApplicationVersion("2.0.0");
+    QCommandLineParser options;
+    options.addOption({"self-test", "Run the isolated regression checks."});
+    options.addOption({"data-dir", "Use a separate database and settings directory.", "directory"});
+    if (!options.parse(app.arguments()) || !options.positionalArguments().isEmpty()) {
+        std::cerr << (options.errorText().isEmpty() ? "Unexpected positional arguments."
+                                                   : qPrintable(options.errorText())) << std::endl;
+        return 2;
+    }
+    const bool test = options.isSet("self-test");
+    const bool separateData = options.isSet("data-dir");
+    if (separateData && (test || options.value("data-dir").trimmed().isEmpty())) {
+        std::cerr << "--data-dir requires a directory and cannot be used with --self-test." << std::endl;
+        return 2;
+    }
+    // Self-tests assert exact metrics, so they ignore the machine's text size.
+    theme::textScale = test ? 1.0 : theme::systemTextScale();
+    app.setFont(QFont("Microsoft YaHei UI", qRound(11 * theme::textScale)));
+    // Qt 5 stylesheets cannot reach placeholder text; keep it at AA contrast via the palette.
+    auto palette = app.palette();
+    palette.setColor(QPalette::PlaceholderText, theme::color("ink-soft"));
+    app.setPalette(palette);
+    QFile style(QCoreApplication::applicationDirPath() + "/style.qss");
+    if (style.open(QIODevice::ReadOnly)) {
+        theme::baseStyle = theme::resolve(QString::fromUtf8(style.readAll()));
+        app.setStyleSheet(theme::scaleText(theme::baseStyle));
+    }
+    QString dataDir;
+    if (test) {
+        dataDir = QDir::currentPath() + "/test-results/run-" +
+                  QDateTime::currentDateTime().toString("yyyyMMdd-HHmmsszzz");
+    } else
+        dataDir = separateData ? QDir(options.value("data-dir")).absolutePath() : existingDataDir;
+    if (dataDir.isEmpty() || !QDir().mkpath(dataDir)) {
+        std::cerr << "Cannot create the application data directory." << std::endl;
+        return 2;
+    }
+    QLockFile lock(dataDir + "/app.lock");
+    if (!test && !lock.tryLock(100)) {
+        QMessageBox::information(nullptr, "简序", "已有一个简序实例正在运行，请检查任务栏或系统托盘。");
+        return 0;
+    }
+    try {
+        Store store(dataDir + "/tasks.sqlite");
+        if (!QFile::exists(dataDir + "/settings.ini"))
+            store.seed();
+        Controller controller(store, dataDir + "/settings.ini", test, separateData);
+        if (test) {
+            bool ok = controller.smokeTest(dataDir);
+            QFile report(dataDir + "/result.txt");
+            report.open(QIODevice::WriteOnly);
+            report.write(
+                ok ? "PASS: wheel scrolling and position retention, plan expand, 48-hour completion "
+                     "retention and history, checkmark progress, date detail creation, context pin, "
+                     "custom categories, frameless and opacity, manager entry, SQLite migration backup, "
+                     "calendar drop, backup roundtrip and rollback, task/plan forms, daily/weekly/monthly "
+                     "quotas, "
+                     "selected dates, month end, fixed/relative interval, cumulative counts, rule backup, "
+                     "window rendering\n"
+                   : "FAIL\n");
+            std::cout << (ok ? "PASS " : "FAIL ") << dataDir.toStdString() << std::endl;
+            return ok ? 0 : 1;
+        }
+        controller.show();
+        return app.exec();
+    } catch (const std::exception &e) {
+        if (test)
+            std::cerr << e.what() << std::endl;
+        else
+            QMessageBox::critical(nullptr, "简序无法启动", QString::fromUtf8(e.what()));
+        return 2;
+    }
+}

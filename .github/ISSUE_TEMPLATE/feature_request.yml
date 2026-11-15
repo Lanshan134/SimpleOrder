@@ -1,0 +1,26 @@
+name: 功能与体验建议
+description: 讨论新功能或已有体验的改进
+title: "[需求] "
+labels: ["type:feature", "status:discussion"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景与问题
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 希望的行为
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围与暂不处理的内容
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      description: 用可以实际操作验证的结果描述；尚不明确可以在讨论中补充。
