@@ -174,6 +174,11 @@ QDate Calendar::dateAt(const QPoint &p) const {
     return !displayOutside && result.month() != monthShown() ? QDate() : result;
 }
 bool Calendar::eventFilter(QObject *watched, QEvent *event) {
+    // Qt turns the month on a wheel event but leaves it unaccepted, so the page would scroll as well.
+    if (event->type() == QEvent::Wheel && !wheelChangesMonth) {
+        event->ignore();
+        return true;
+    }
     if (event->type() == QEvent::MouseButtonPress) {
         auto mouse = static_cast<QMouseEvent *>(event);
         auto viewport = qobject_cast<QWidget *>(watched);

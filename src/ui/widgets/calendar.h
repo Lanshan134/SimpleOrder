@@ -9,6 +9,8 @@ class Calendar : public QCalendarWidget {
   public:
     bool showCompleted = true, displayOutside = true;
     bool previewOnly = false;
+    // Off where the calendar sits in a scrolling page: the wheel then belongs to that page.
+    bool wheelChangesMonth = true;
     bool mouseDateSelection = false;
     std::function<void(bool)> dateGesture;
     int retentionHours = 48, maxDots = 3;

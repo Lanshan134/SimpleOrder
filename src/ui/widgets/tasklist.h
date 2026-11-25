@@ -8,6 +8,7 @@ class QMenu;
 
 class TaskList : public QListWidget {
     Qt::MouseButton pressedButton = Qt::LeftButton;
+    qreal wheelRemainder = 0;
 
   public:
     std::function<void(qint64)> edit, contextEdit, complete, togglePin;

@@ -247,17 +247,23 @@ void TaskList::startDrag(Qt::DropActions) {
     drag->setMimeData(mime);
     drag->exec(Qt::MoveAction);
 }
+// Each event moves one thing: this list while it can go that way, otherwise the page around it.
 void TaskList::wheelEvent(QWheelEvent *event) {
     auto bar = verticalScrollBar();
-    if (bar->maximum() > 0) {
-        int delta = event->pixelDelta().y();
-        if (!delta)
-            delta = event->angleDelta().y() * scaled(this, ROW_HEIGHT) / 40;
-        bar->setValue(bar->value() - delta);
-        event->accept();
+    qreal delta = event->pixelDelta().y();
+    if (!delta)
+        delta = event->angleDelta().y() * scaled(this, ROW_HEIGHT) / 40.0;
+    if (!delta || bar->value() == (delta > 0 ? bar->minimum() : bar->maximum())) {
+        wheelRemainder = 0;
+        event->ignore();
         return;
     }
-    QListWidget::wheelEvent(event);
+    // Touchpads send steps well under a pixel; carry the fraction to the next event.
+    delta += wheelRemainder;
+    const int step = int(delta);
+    wheelRemainder = delta - step;
+    bar->setValue(bar->value() - step);
+    event->accept();
 }
 void TaskList::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Space && currentItem() && currentItem()->data(Qt::UserRole).toLongLong()) {

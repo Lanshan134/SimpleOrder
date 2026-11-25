@@ -101,6 +101,7 @@ void Controller::buildFloating() {
     calendarLayout->setSpacing(6);
     calendarLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
     floatCal = new Calendar;
+    floatCal->wheelChangesMonth = false;
     calendarLayout->addWidget(floatCal, 1);
     floatDay = new TaskList;
     floatDay->setAccessibleName("选中日期的事项");
