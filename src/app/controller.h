@@ -49,6 +49,7 @@ class Controller : public QObject {
     bool dateManuallyEdited = false;
     bool parseEditorTitle();
     void smartEntrySmokeTest(const QString &);
+    void dateLabelSmokeTest(const QString &);
     bool dateFieldActive = false, calendarDateEditPending = false;
     int dateFocusGeneration = 0;
     bool eventFilter(QObject *, QEvent *) override;

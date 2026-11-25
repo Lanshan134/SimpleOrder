@@ -6,6 +6,11 @@
 
 class QMenu;
 
+// 昨天, 今天 or 明天, and empty for any other day.
+QString relativeDay(const QDate &date, const QDate &today);
+// Relative words for the days people scan for; urgency colours today (1), overdue (2) and tomorrow (3).
+QString dateMarker(const QString &iso, const QDate &today, int *urgency);
+
 class TaskList : public QListWidget {
     Qt::MouseButton pressedButton = Qt::LeftButton;
 

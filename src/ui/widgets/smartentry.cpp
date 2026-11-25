@@ -59,6 +59,11 @@ void SmartEntry::changeEvent(QEvent *event) {
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange)
         updatePreview();
 }
+// Text left here since yesterday still means a day relative to now.
+void SmartEntry::focusInEvent(QFocusEvent *event) {
+    QPlainTextEdit::focusInEvent(event);
+    updatePreview();
+}
 void SmartEntry::inputMethodEvent(QInputMethodEvent *event) {
     composing = !event->preeditString().isEmpty();
     QPlainTextEdit::inputMethodEvent(event);

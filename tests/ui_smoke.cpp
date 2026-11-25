@@ -472,6 +472,7 @@ bool Controller::smokeTest(const QString &dir) {
     editorSmokeTest(dir);
     draftSmokeTest(dir);
     calendarEditorSmokeTest();
+    dateLabelSmokeTest(dir);
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
@@ -1040,6 +1041,114 @@ void Controller::calendarEditorSmokeTest() {
     fillEditor();
     clickDate(cal, b);
     require(!selected && !hasEditorChanges(), "clean existing view switches without any confirmation");
+}
+
+void Controller::dateLabelSmokeTest(const QString &directory) {
+    auto check = [](bool ok, const char *name) {
+        if (!ok)
+            throw std::runtime_error(name);
+    };
+    const QDate fixed(2026, 12, 31);
+    auto marker = [&](const QDate &date, const QString &word, int expected) {
+        int urgency = -1;
+        return dateMarker(date.toString(Qt::ISODate), fixed, &urgency) == word && urgency == expected;
+    };
+    check(marker(fixed, "今天", 1) && marker(fixed.addDays(1), "明天", 3) && marker(fixed.addDays(-1), "昨天", 2) &&
+              marker(fixed.addDays(2), "2027-01-02", 0) && marker(fixed.addDays(-2), "12-29", 2),
+          "relative words and colours per day");
+    check(marker(QDate(2026, 11, 30), "11-30", 2) && marker(QDate(2025, 12, 31), "2025-12-31", 2),
+          "other days keep their digits");
+    // The same row read a day later, as after midnight.
+    int urgency = -1;
+    check(dateMarker("2027-01-01", fixed.addDays(1), &urgency) == "今天" && urgency == 1,
+          "tomorrow becomes today when the day changes");
+
+    auto luminance = [](const QColor &c) {
+        auto linear = [](qreal v) { return v <= .03928 ? v / 12.92 : qPow((v + .055) / 1.055, 2.4); };
+        return .2126 * linear(c.redF()) + .7152 * linear(c.greenF()) + .0722 * linear(c.blueF());
+    };
+    for (auto ink : {"ink-muted", "accent-ink", "danger", "tomorrow"})
+        for (auto back : {"surface", "canvas", "row-hover", "selection"})
+            check((luminance(theme::color(back)) + .05) / (luminance(theme::color(ink)) + .05) >= 4.5,
+                  "date colours stay readable on every row background");
+
+    auto paint = [&](int urgencyValue, bool isDone) {
+        QStandardItemModel model(1, 1);
+        auto index = model.index(0, 0);
+        model.setData(index, 42, Qt::UserRole);
+        model.setData(index, QColor("#6b97c6"), Qt::UserRole + 1);
+        model.setData(index, isDone, Qt::UserRole + 3);
+        model.setData(index, "明天 15:00", Qt::UserRole + 4);
+        model.setData(index, urgencyValue, Qt::UserRole + 6);
+        QImage image(300, 30, QImage::Format_ARGB32);
+        image.fill(Qt::white);
+        QStyleOptionViewItem option;
+        option.rect = QRect(0, 0, 300, 30);
+        option.widget = all;
+        option.font = all->font();
+        QPainter painter(&image);
+        all->itemDelegate()->paint(&painter, option, index);
+        painter.end();
+        return image;
+    };
+    check(paint(3, false) != paint(0, false) && paint(3, false) != paint(1, false) && paint(3, false) != paint(2, false),
+          "tomorrow has a colour of its own");
+    check(paint(3, true) == paint(0, true), "done rows keep the muted date");
+
+    const QDate today = QDate::currentDate();
+    QList<qint64> ids;
+    for (int offset : {-1, 0, 1, 2}) {
+        Item item;
+        item.title = QString("日期标签 %1").arg(offset);
+        item.date = today.addDays(offset).toString(Qt::ISODate);
+        item.time = "15:00";
+        ids << store.save(item).id;
+    }
+    selected = 0;
+    dirty = false;
+    refresh();
+    for (auto list : {tasks, all}) {
+        int seen = 0;
+        for (int n = 0; n < list->count(); ++n) {
+            auto row = list->item(n);
+            const int at = ids.indexOf(row->data(Qt::UserRole).toLongLong());
+            if (at < 0)
+                continue;
+            ++seen;
+            const QString iso = today.addDays(at - 1).toString(Qt::ISODate);
+            check(row->toolTip().contains(iso + " 15:00") &&
+                      row->data(Qt::AccessibleTextRole).toString().contains(iso + " 15:00"),
+                  "hover and accessible text give the full date");
+            if (at < 3)
+                check(row->data(Qt::UserRole + 4).toString() == QStringList{"昨天", "今天", "明天"}[at] + " 15:00",
+                      "relative date keeps the time");
+            check(row->data(Qt::UserRole + 6).toInt() == QList<int>{2, 1, 3, 0}[at], "row urgency");
+        }
+        check(seen == 4, "dated rows listed");
+    }
+    floating->grab().save(directory + "/date-labels-floating.png");
+    manager->grab().save(directory + "/date-labels-manager.png");
+    for (int offset : {-1, 0, 1, 2}) {
+        setDate(today.addDays(offset));
+        const QString word = offset < 2 ? QStringList{"昨天", "今天", "明天"}[offset + 1] + " · " : QString();
+        check(dateLabel->text().startsWith(word + QLocale().toString(today.addDays(offset), "M月d日 ddd")),
+              "day heading uses the same words");
+    }
+    for (auto id : ids)
+        store.remove(id);
+    selected = 0;
+    setDate(today);
+    refresh();
+
+    auto quick = manager->findChild<SmartEntry *>();
+    quick->setPlainText("买菜 明天");
+    const QString fresh = quick->toolTip();
+    quick->setToolTip("昨日结果");
+    QFocusEvent focus(QEvent::FocusIn);
+    QApplication::sendEvent(quick, &focus);
+    check(fresh.contains(today.addDays(1).toString(Qt::ISODate)) && quick->toolTip() == fresh,
+          "returning to quick entry resolves its dates again");
+    quick->clear();
 }
 
 void Controller::smartEntrySmokeTest(const QString &directory) {

@@ -20,6 +20,7 @@ inline const QHash<QString, QString> &tokens() {
         {"accent-hover", "#1d4fd8"},
         {"accent-ink", "#1d4ed8"},   // accent text on light tints
         {"focus", "#2563eb"},        // focus rings
+        {"tomorrow", "#0d6b64"},     // tomorrow's dates; apart from today's blue and overdue red
         {"danger", "#c53030"},       // overdue dates and destructive actions only
         {"control-border", "#7e8591"}, // 3:1 on surface, canvas, row-hover and selection
         {"control-off", "#e3e5e9"},  // disabled switch track and primary button

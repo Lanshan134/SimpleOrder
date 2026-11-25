@@ -13,6 +13,7 @@ class SmartEntry : public QPlainTextEdit {
     void keyPressEvent(QKeyEvent *) override;
     void inputMethodEvent(QInputMethodEvent *) override;
     void changeEvent(QEvent *) override;
+    void focusInEvent(QFocusEvent *) override;
     void insertFromMimeData(const QMimeData *) override;
 
   public:

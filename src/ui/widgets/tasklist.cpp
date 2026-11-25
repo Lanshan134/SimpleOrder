@@ -78,7 +78,8 @@ class RowDelegate : public QStyledItemDelegate {
         p->setFont(small);
         int dw = qMin(130, QFontMetrics(small).horizontalAdvance(detail));
         const int urgency = done ? 0 : idx.data(Qt::UserRole + 6).toInt();
-        p->setPen(foregroundColor(opt.widget, theme::color(urgency == 2   ? "danger"
+        p->setPen(foregroundColor(opt.widget, theme::color(urgency == 3   ? "tomorrow"
+                                                           : urgency == 2 ? "danger"
                                                            : urgency == 1 ? "accent-ink"
                                                                           : "ink-muted")));
         p->drawText(QRect(right - dw - 20, r.top(), dw, r.height()), Qt::AlignVCenter | Qt::AlignRight, detail);
@@ -99,20 +100,21 @@ class RowDelegate : public QStyledItemDelegate {
         p->restore();
     }
 };
-// Relative words for the days people scan for; urgency colours today (1) and overdue items (2).
-QString dateMarker(const QString &iso, int *urgency) {
-    const QDate date = QDate::fromString(iso, Qt::ISODate), today = QDate::currentDate();
-    *urgency = !date.isValid() ? 0 : date < today ? 2 : date == today ? 1 : 0;
-    if (!date.isValid())
-        return iso.mid(5);
-    if (date == today)
-        return "今天";
-    if (date == today.addDays(1))
-        return "明天";
-    if (date == today.addDays(-1))
-        return "昨天";
-    return date.year() == today.year() ? iso.mid(5) : iso;
 }
+
+QString relativeDay(const QDate &date, const QDate &today) {
+    return date == today               ? QString("今天")
+           : date == today.addDays(1)  ? QString("明天")
+           : date == today.addDays(-1) ? QString("昨天")
+                                       : QString();
+}
+QString dateMarker(const QString &iso, const QDate &today, int *urgency) {
+    const QDate date = QDate::fromString(iso, Qt::ISODate);
+    *urgency = !date.isValid() ? 0 : date < today ? 2 : date == today ? 1 : date == today.addDays(1) ? 3 : 0;
+    const QString word = relativeDay(date, today);
+    if (!word.isEmpty())
+        return word;
+    return date.isValid() && date.year() != today.year() ? iso : iso.mid(5);
 }
 
 TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
@@ -151,6 +153,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
     QSignalBlocker block(this);
     clear();
     int last = -1;
+    const QDate today = QDate::currentDate();
     const auto sectionOf = [](const Item &i) { return i.done ? 3 : i.pinned ? 0 : i.type == "task" ? 1 : 2; };
     QHash<int, int> sectionCounts;
     if (headings)
@@ -183,7 +186,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         } else {
             // A list for one chosen day already says which day it is.
             if (dates && !i.date.isEmpty() && !property("dayList").toBool())
-                marker = dateMarker(i.date, &urgency);
+                marker = dateMarker(i.date, today, &urgency);
             if (times && !i.time.isEmpty())
                 marker += (marker.isEmpty() ? QString() : " ") + i.time;
         }
