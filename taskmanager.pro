@@ -24,6 +24,7 @@ SOURCES += \
     src/ui/windows/settings.cpp \
     src/ui/windows/window.cpp \
     tests/entryparser_tests.cpp \
+    tests/floating_smoke.cpp \
     tests/settings_smoke.cpp \
     tests/ui_smoke.cpp
 

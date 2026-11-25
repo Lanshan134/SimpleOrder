@@ -475,6 +475,7 @@ bool Controller::smokeTest(const QString &dir) {
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
+    floatingSmokeTest(dir);
 
     return true;
 }
@@ -1232,8 +1233,8 @@ void Controller::layoutSmokeTest(const QString &directory) {
                             check(floatCal->rect().contains(QRect(table->mapTo(floatCal, QPoint()),
                                                                  table->size())),
                                   "calendar last row remains in bounds: " + context);
-                        check(floatDay->height() == 4 * scaled(floating, ROW_HEIGHT),
-                              "redesigned day list keeps four visible rows: " + context);
+                        check(floatDay->height() == qBound(1, count, 4) * scaled(floating, ROW_HEIGHT),
+                              "day list uses its actual row count: " + context);
                     }
                     if (!scale && count == 1 && size == QSize(420, 900))
                         floating->grab().save(directory + QString("/layout-tall-%1.png").arg(mode));

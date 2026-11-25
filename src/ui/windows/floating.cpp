@@ -106,7 +106,6 @@ void Controller::buildFloating() {
     floatDay->setAccessibleName("选中日期的事项");
     floatDay->setProperty("dayList", true);
     floatDay->setProperty("emptyText", "这一天没有事项");
-    floatDay->setFixedHeight(4 * ROW_HEIGHT);
     bindList(floatDay);
     calendarLayout->addWidget(floatDay);
     // The stack may be shorter than the calendar's minimum plus its day list.
@@ -267,7 +266,7 @@ void Controller::scaleFloating(bool force) {
     tasks->setMinimumHeight(row);
     tasks->setProperty("preferredRows", settings.value("taskRows", 5).toInt());
     tasks->updateGeometry();
-    floatDay->setFixedHeight(4 * row);
+    fitDayList();
     for (auto list : {pins, plans})
         list->setFixedHeight(qMax(1, qMin(6, list->count())) * row);
     for (auto list : {pins, tasks, plans, floatDay}) {
@@ -285,6 +284,10 @@ void Controller::scaleFloating(bool force) {
     tasks->snapToRows();
     floating->update();
     scalingFloating = false;
+}
+// The day list is as tall as its items, from one row (also its empty state) to four; more of them scroll.
+void Controller::fitDayList() {
+    floatDay->setFixedHeight(qBound(1, floatDay->count(), 4) * scaled(floating, ROW_HEIGHT));
 }
 void Controller::applyFloatingAppearance() {
     bool visible = floating->isVisible();

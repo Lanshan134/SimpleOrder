@@ -216,6 +216,7 @@ void Controller::updateLists() {
     all->fill(visible, true);
     dayItems->fill(sortedItems(dayRows));
     floatDay->fill(sortedItems(floatRows));
+    fitDayList();
     dateLabel->setText(QLocale().toString(day, day == QDate::currentDate() ? "今天 · M月d日 ddd" : "M月d日 ddd") +
                        QString(" · %1 项").arg(dayRows.size()));
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {

@@ -75,6 +75,7 @@ class Controller : public QObject {
     QString floatingBaseStyle;
     void setupFloatingScaling();
     void scaleFloating(bool force = false);
+    void fitDayList();
     void buildManager();
     void fillEditor();
     void updateLists();
@@ -90,6 +91,7 @@ class Controller : public QObject {
     bool add(const QString &, QDate = {});
     void settingsDialog();
     void layoutSmokeTest(const QString &directory);
+    void floatingSmokeTest(const QString &directory);
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);
