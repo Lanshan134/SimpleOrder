@@ -1,5 +1,6 @@
 #include "app/controller.h"
 #include "ui/windows/settings.h"
+#include "ui/widgets/categorypopup.h"
 #include "ui/widgets/smartentry.h"
 #include "ui/widgets/widgettools.h"
 #include <algorithm>
@@ -118,7 +119,7 @@ void Controller::buildManager() {
 
     title = new QLineEdit;
     title->setMaxLength(1000);
-    title->setToolTip("可输入名称与日期时间，按回车识别后再保存。");
+    title->setToolTip("可输入名称、日期时间与 #类型，按回车识别后再保存。");
     connect(title, &QLineEdit::returnPressed, this, [this] { parseEditorTitle(); });
     date = new QLineEdit;
     date->installEventFilter(this);
@@ -245,6 +246,27 @@ void Controller::buildManager() {
         });
     });
     connect(date, &QLineEdit::textEdited, this, [this] { dateManuallyEdited = true; });
+    connect(group, QOverload<int>::of(&QComboBox::activated), this, [this] { groupManuallyEdited = true; });
+    // Choosing a suggestion fills the type field at once, so saving needs no Enter first.
+    auto categoryPopup = new CategoryPopup(
+        title,
+        [this] {
+            const bool task = type->currentData().toString() == "task";
+            return task ? title->text().left(title->cursorPosition()) : QString();
+        },
+        [this](int start, const Category &category) {
+            title->setSelection(start, title->cursorPosition() - start);
+            title->insert(QString());
+            group->setCurrentIndex(group->findData(category.id));
+            groupManuallyEdited = true;
+        });
+    connect(title, &QLineEdit::textEdited, this, [categoryPopup] { categoryPopup->refresh(); });
+    connect(title, &QLineEdit::cursorPositionChanged, this, [categoryPopup] {
+        if (categoryPopup->isOpen())
+            categoryPopup->refresh();
+    });
+    connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [categoryPopup] { categoryPopup->hide(); });
     auto changed = [this] {
         if (!refreshing) {
             dirty = hasEditorChanges();

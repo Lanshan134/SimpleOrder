@@ -58,7 +58,7 @@ bool Controller::eventFilter(QObject *watched, QEvent *event) {
 }
 void Controller::fillEditor() {
     refreshing = true;
-    dateManuallyEdited = false;
+    dateManuallyEdited = groupManuallyEdited = false;
     title->setProperty("entryError", QString());
     dateFieldActive = false;
     calendarDateEditPending = false;
@@ -261,7 +261,7 @@ void Controller::editFloatingItem(qint64 id) {
 bool Controller::parseEditorTitle() {
     if (settingsPreview || type->currentData().toString() != "task")
         return false;
-    const auto parsed = parseEntry(title->text());
+    const auto parsed = parseEntry(title->text(), QDate::currentDate(), currentCategories());
     QString error = parsed.error;
     if (error.isEmpty() && parsed.date.isValid() && !date->text().trimmed().isEmpty() &&
         date->text().trimmed() != parsed.date.toString(Qt::ISODate) && (selected || dateManuallyEdited))
@@ -269,6 +269,9 @@ bool Controller::parseEditorTitle() {
     if (error.isEmpty() && parsed.time.isValid() && !time->text().trimmed().isEmpty() &&
         time->text().trimmed() != parsed.time.toString("HH:mm"))
         error = "时间框已有值，请先清空时间框或移除名称中的时间";
+    if (error.isEmpty() && !parsed.group.isEmpty() && parsed.group != group->currentData().toString() &&
+        (selected || groupManuallyEdited))
+        error = "类型已选定，请在类型框改选或移除名称中的 #类型";
     title->setProperty("entryError", error);
     if (!error.isEmpty()) {
         QToolTip::showText(title->mapToGlobal(QPoint(0, title->height())), error, title);
@@ -278,6 +281,8 @@ bool Controller::parseEditorTitle() {
     if (parsed.spans.isEmpty())
         return false;
     title->setText(parsed.title);
+    if (!parsed.group.isEmpty())
+        group->setCurrentIndex(group->findData(parsed.group));
     if (parsed.date.isValid())
         date->setText(parsed.date.toString(Qt::ISODate));
     if (parsed.time.isValid()) {

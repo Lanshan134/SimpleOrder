@@ -355,7 +355,7 @@ void Controller::schedule(qint64 id, QDate d) {
 bool Controller::add(const QString &t, QDate d) {
     if (settingsPreview)
         return false;
-    const auto parsed = parseEntry(t);
+    const auto parsed = parseEntry(t, QDate::currentDate(), currentCategories());
     if (!parsed.error.isEmpty())
         throw std::runtime_error(parsed.error.toUtf8().constData());
     if (!leaveEditor())
@@ -366,7 +366,7 @@ bool Controller::add(const QString &t, QDate d) {
         d = QDate::currentDate();
     Item i;
     i.title = parsed.title;
-    i.group = settings.value("defaultType", "other").toString();
+    i.group = parsed.group.isEmpty() ? settings.value("defaultType", "other").toString() : parsed.group;
     i.date = d.isValid() ? d.toString(Qt::ISODate) : QString();
     i.time = parsed.time.isValid() ? parsed.time.toString("HH:mm") : QString();
     selected = store.save(i).id;

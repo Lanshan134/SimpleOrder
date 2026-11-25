@@ -475,6 +475,7 @@ bool Controller::smokeTest(const QString &dir) {
     dateLabelSmokeTest(dir);
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
+    categoryTagSmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
 
     return true;
@@ -1287,6 +1288,278 @@ void Controller::smartEntrySmokeTest(const QString &directory) {
     });
     editFloatingItem(selected);
     fillEditor();
+}
+
+void Controller::categoryTagSmokeTest(const QString &directory) {
+    auto check = [](bool ok, const QString &name) {
+        if (!ok)
+            throw std::runtime_error(name.toStdString());
+    };
+    auto get = [&] {
+        for (auto i : store.all())
+            if (i.id == selected)
+                return i;
+        return Item{};
+    };
+    auto press = [](QWidget *input, int key) {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+        QApplication::sendEvent(input, &event);
+    };
+    auto write = [](QWidget *input, const QString &text) {
+        for (auto ch : text) {
+            QKeyEvent event(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier, ch);
+            QApplication::sendEvent(input, &event);
+        }
+    };
+    // The open suggestions of an input's window, or nothing.
+    auto popup = [](QWidget *input) -> QListWidget * {
+        for (auto list : input->window()->findChildren<QListWidget *>("categoryPopup"))
+            if (list->isVisible())
+                return list;
+        return nullptr;
+    };
+    auto names = [&](QWidget *input) {
+        QStringList out;
+        if (auto list = popup(input))
+            for (int n = 0; n < list->count(); ++n)
+                out << list->item(n)->text();
+        return out;
+    };
+    auto click = [](QListWidget *list, int row) {
+        const QPoint at = list->visualItemRect(list->item(row)).center();
+        for (auto kind : {QEvent::MouseButtonPress, QEvent::MouseButtonRelease}) {
+            QMouseEvent event(kind, at, list->viewport()->mapToGlobal(at), Qt::LeftButton,
+                              kind == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(list->viewport(), &event);
+        }
+    };
+    auto reset = [&] {
+        dirty = false;
+        selected = 0;
+        fillEditor();
+    };
+    store.saveCategory({"tag-room", "工作室", "#6bc6a1"});
+    store.saveCategory({"tag-work", "工作", "#c66b6b"});
+    store.saveCategory({"tag-space", "学习 进阶", "#6b97c6"});
+    store.saveCategory({"tag-base", "学习", "#a68ac5"});
+    reloadCategories();
+    reset();
+    const QString fallback = settings.value("defaultType", "other").toString();
+    const bool calendarPage = stack->currentIndex() == 1;
+    manager->show();
+    floating->show();
+    closeEditor();
+    for (auto input : manager->findChildren<SmartEntry *>() + floating->findChildren<SmartEntry *>()) {
+        if (input->window() == floating) {
+            stack->setCurrentIndex(input->placeholderText() == "添加到选中日期" ? 1 : 0);
+            QApplication::processEvents();
+        }
+        const QString where = input->placeholderText() + "/" + input->window()->objectName() + ": ";
+        QApplication::setActiveWindow(input->window());
+        input->setFocus();
+        input->clear();
+        write(input, "开会 #");
+        check(names(input).size() == store.categories().size() && popup(input)->currentRow() < 0,
+              where + "hash lists every category without choosing one");
+        write(input, "工");
+        check(names(input) == QStringList({"工作室", "工作"}) && popup(input)->currentRow() == 0,
+              where + "typing filters the categories");
+        check(input->window()->rect().contains(popup(input)->geometry()) &&
+                  !popup(input)->geometry().intersects(QRect(input->mapTo(input->window(), QPoint()), input->size())),
+              where + "suggestions fit the window and leave the input clear");
+        press(input, Qt::Key_Down);
+        press(input, Qt::Key_Down);
+        check(popup(input)->currentRow() == 1, where + "down stops at the last suggestion");
+        press(input, Qt::Key_Up);
+        press(input, Qt::Key_Down);
+        const auto before = store.all().size();
+        press(input, Qt::Key_Return);
+        check(store.all().size() == before && input->toPlainText() == "开会 #工作 " && !popup(input) &&
+                  input->extraSelections().size() == 1 && input->toolTip() == "工作",
+              where + "Enter takes the suggestion without submitting");
+        press(input, Qt::Key_Return);
+        check(store.all().size() == before + 1 && get().title == "开会" && get().group == "tag-work" &&
+                  input->toPlainText().isEmpty(),
+              where + "the saved task is in the chosen category");
+        write(input, "布展 #工");
+        press(input, Qt::Key_Tab);
+        check(input->toPlainText() == "布展 #工作室 " && input->hasFocus(), where + "Tab takes the suggestion");
+        input->undo();
+        check(!input->toPlainText().contains("工作室"), where + "a suggestion can be undone");
+        input->clear();
+        write(input, "布展 #工");
+        click(popup(input), 1);
+        check(input->toPlainText() == "布展 #工作 " && input->hasFocus() && !popup(input),
+              where + "a click takes the suggestion and leaves the focus");
+        input->clear();
+    }
+    stack->setCurrentIndex(calendarPage ? 1 : 0);
+
+    auto quick = manager->findChild<SmartEntry *>();
+    QApplication::setActiveWindow(manager);
+    quick->setFocus();
+    write(quick, "报修 #工");
+    press(quick, Qt::Key_Escape);
+    write(quick, "作");
+    check(!popup(quick) && quick->toPlainText() == "报修 #工作", "Esc keeps the suggestions closed for this tag");
+    write(quick, "单");
+    press(quick, Qt::Key_Return);
+    check(get().title == "报修 #工作单" && get().group == fallback, "unmatched tag stays in the name");
+    write(quick, "整理 #");
+    press(quick, Qt::Key_Return);
+    check(get().title == "整理 #", "Enter on a bare hash submits");
+    write(quick, "开会 #工作");
+    check(names(quick) == QStringList({"工作", "工作室"}), "an exact name is listed first");
+    press(quick, Qt::Key_Return);
+    check(get().title == "开会" && get().group == "tag-work", "a typed full name needs one Enter");
+    write(quick, "读书 #学习 进");
+    check(names(quick) == QStringList{"学习 进阶"} && popup(quick)->currentRow() < 0, "names with spaces are offered");
+    press(quick, Qt::Key_Down);
+    press(quick, Qt::Key_Return);
+    press(quick, Qt::Key_Return);
+    check(get().title == "读书" && get().group == "tag-space", "names with spaces can be chosen");
+    write(quick, "读书 #学习 ");
+    check(!popup(quick), "a finished tag needs no further suggestion");
+    press(quick, Qt::Key_Return);
+    check(get().group == "tag-base", "prefix of a longer category name");
+    write(quick, "C#");
+    check(!popup(quick), "no suggestions inside a word");
+    quick->clear();
+
+    const auto before = store.all().size();
+    write(quick, "输入法 #工");
+    QInputMethodEvent preedit("zuo", {});
+    QApplication::sendEvent(quick, &preedit);
+    press(quick, Qt::Key_Return);
+    check(store.all().size() == before && quick->toPlainText() == "输入法 #工", "IME Enter takes no suggestion");
+    QInputMethodEvent committed;
+    committed.setCommitString("作室");
+    QApplication::sendEvent(quick, &committed);
+    check(names(quick) == QStringList{"工作室"}, "committed IME text filters");
+    QFocusEvent left(QEvent::FocusOut);
+    QApplication::sendEvent(quick, &left);
+    check(!popup(quick), "leaving the input closes the suggestions");
+    quick->setPlainText(QString(996, 'x') + " #");
+    quick->moveCursor(QTextCursor::End);
+    write(quick, "工");
+    press(quick, Qt::Key_Tab);
+    check(quick->toPlainText().size() == 999, "a suggestion cannot exceed the length limit");
+    quick->clear();
+
+    store.saveCategory({"tag-work", "工厂", "#c66b6b"});
+    reloadCategories();
+    write(quick, "巡检 #工厂");
+    check(names(quick) == QStringList{"工厂"}, "renamed category is offered");
+    press(quick, Qt::Key_Return);
+    check(get().group == "tag-work", "renamed category is used");
+    store.saveCategory({"tag-work", "工作", "#c66b6b"});
+    reloadCategories();
+    write(quick, "开会 #工");
+    manager->grab().save(directory + "/category-popup-manager.png");
+    quick->clear();
+
+    // The list must stay readable over a see-through floating window.
+    const auto opacity = settings.value("opacity", 100), textOpacity = settings.value("textOpacity", 100);
+    settings.setValue("opacity", 0);
+    settings.setValue("textOpacity", 40);
+    applyFloatingAppearance();
+    stack->setCurrentIndex(0);
+    floating->resize(390, 340);
+    QApplication::processEvents();
+    SmartEntry *small = nullptr;
+    for (auto input : floating->findChildren<SmartEntry *>())
+        if (input->isVisible())
+            small = input;
+    write(small, "开会 #");
+    QApplication::processEvents();
+    const auto shot = floating->grab().toImage();
+    const QRect inside = popup(small)->geometry().adjusted(6, 6, -6, -6);
+    for (int y = inside.top(); y <= inside.bottom(); ++y)
+        for (int x = inside.left(); x <= inside.right(); ++x)
+            check(shot.pixelColor(x, y).alpha() == 255, "suggestions are opaque");
+    floating->grab().save(directory + "/category-popup-floating.png");
+    floating->resize(420, 480);
+    QApplication::processEvents();
+    check(!popup(small), "resizing the window closes the suggestions");
+    small->clear();
+    settings.setValue("opacity", opacity);
+    settings.setValue("textOpacity", textOpacity);
+    applyFloatingAppearance();
+    stack->setCurrentIndex(calendarPage ? 1 : 0);
+
+    // Editor: a suggestion fills the type field; a typed tag follows the conflict rules on Enter.
+    reset();
+    openEditor();
+    QApplication::setActiveWindow(manager);
+    title->setFocus();
+    write(title, "写周报 #工作");
+    manager->grab().save(directory + "/category-popup-editor.png");
+    check(names(title) == QStringList({"工作", "工作室"}) &&
+              popup(title)->y() >= title->mapTo(manager, QPoint(0, title->height())).y(),
+          "editor name offers categories below it");
+    const QImage dot = popup(title)->item(0)->icon().pixmap(16, 16, QIcon::Selected).toImage();
+    check(dot.pixelColor(dot.width() / 2, dot.height() / 2) == QColor("#c66b6b"), "a selected suggestion keeps its colour");
+    press(title, Qt::Key_Tab);
+    check(title->text().trimmed() == "写周报" && group->currentData() == "tag-work" && !popup(title) && !selected,
+          "editor suggestion fills the type field");
+    saveEditor();
+    check(get().title == "写周报" && get().group == "tag-work", "editor task saved in the chosen category");
+    title->setText("写周报 #学习");
+    press(title, Qt::Key_Return);
+    check(title->text() == "写周报 #学习" && group->currentData() == "tag-work" &&
+              !title->property("entryError").toString().isEmpty(),
+          "typed tag does not overwrite an existing task's type");
+    title->clear();
+    write(title, "写周报 #学");
+    press(title, Qt::Key_Return);
+    check(group->currentData() == "tag-base" || group->currentData() == "study", "a chosen suggestion does");
+    reset();
+    title->setText("计划 #学习 明天");
+    press(title, Qt::Key_Return);
+    check(title->text() == "计划" && group->currentData() == "tag-base" &&
+              date->text() == QDate::currentDate().addDays(1).toString(Qt::ISODate),
+          "typed tag fills a new task on Enter");
+    reset();
+    const int chosen = group->findData("tag-room");
+    group->setCurrentIndex(chosen);
+    emit group->activated(chosen);
+    title->setText("布展 #学习");
+    press(title, Qt::Key_Return);
+    check(title->text() == "布展 #学习" && group->currentData() == "tag-room", "typed tag keeps a type chosen by hand");
+    reset();
+    editorTabs->setCurrentIndex(1);
+    write(title, "计划 #工");
+    check(!popup(title), "plan names offer no categories");
+    reset();
+    closeEditor();
+
+    selected = 0;
+    check(add("对话框任务"), "dialog task created");
+    QTimer::singleShot(0, this, [&] {
+        if (!itemWindow)
+            return;
+        QApplication::setActiveWindow(itemWindow);
+        title->setFocus();
+        title->end(false);
+        write(title, " #工");
+        const bool opened = popup(title) && popup(title)->window() == itemWindow;
+        itemWindow->grab().save(directory + "/category-popup-dialog.png");
+        press(title, Qt::Key_Escape);
+        const bool stays = itemWindow && itemWindow->isVisible() && !popup(title);
+        itemWindow->close();
+        check(opened && stays, "Esc closes the suggestions before the dialog");
+    });
+    editFloatingItem(selected);
+    reset();
+    openEditor();
+    write(title, "再次 #工");
+    check(popup(title) && popup(title)->window() == manager, "suggestions return to the manager with the editor");
+    reset();
+    closeEditor();
+    for (auto id : {"tag-room", "tag-work", "tag-space", "tag-base"})
+        store.removeCategory(id, "other");
+    reloadCategories();
+    refresh();
 }
 
 void Controller::layoutSmokeTest(const QString &directory) {

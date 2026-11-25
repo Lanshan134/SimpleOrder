@@ -16,4 +16,6 @@ qreal widgetScale(const QWidget *widget);
 QColor surfaceColor(const QWidget *widget, QColor color, const char *key);
 QColor foregroundColor(const QWidget *widget, QColor color);
 int scaled(const QWidget *widget, int value);
+// The categories in their settings order, as last loaded.
+const QList<Category> &currentCategories();
 void updateCategoryColors(const QList<Category> &categories);

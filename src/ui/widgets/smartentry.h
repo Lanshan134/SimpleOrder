@@ -3,11 +3,14 @@
 #include <QPlainTextEdit>
 #include <functional>
 
+class CategoryPopup;
+
 class SmartEntry : public QPlainTextEdit {
     Q_OBJECT
     std::function<bool(const QString &)> submit;
     void updatePreview();
     bool composing = false;
+    CategoryPopup *categoryPopup;
 
   protected:
     void keyPressEvent(QKeyEvent *) override;

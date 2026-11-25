@@ -11,6 +11,9 @@ QList<Token> tokens(const QString &text, const QString &pattern) {
     auto matches = QRegularExpression(pattern).globalMatch(text);
     while (matches.hasNext()) {
         auto m = matches.next();
+        // `#3点` or `#明天` is a name written with a hash, not a time or a date.
+        if (m.capturedStart() > 0 && text.at(m.capturedStart() - 1) == '#')
+            continue;
         out << Token{m.capturedStart(), m.capturedLength(), m.captured()};
     }
     return out;
@@ -77,7 +80,16 @@ QDate nextAnnual(int month, int day, const QDate &today) {
     return {};
 }
 } // namespace
-ParsedEntry parseEntry(const QString &source, const QDate &today) {
+bool startsTag(const QString &text, int at) {
+    const QChar wideHash(0xff03);
+    if (text.at(at) != '#' && text.at(at) != wideHash)
+        return false;
+    if (at == 0)
+        return true;
+    const QChar before = text.at(at - 1);
+    return before.isSpace() || (before.unicode() > 0x7f && before != wideHash);
+}
+ParsedEntry parseEntry(const QString &source, const QDate &today, const QList<Category> &categories) {
     ParsedEntry out;
     out.title = source.trimmed();
     if (!today.isValid()) {
@@ -87,6 +99,27 @@ ParsedEntry parseEntry(const QString &source, const QDate &today) {
     // Keep UTF-16 positions unchanged so highlight ranges match the original input.
     QString text = source;
     text.replace(QChar(0xff1a), ':');
+    text.replace(QChar(0xff03), '#');
+    // A tag is the exact name of a category up to a space or the end; the longest name wins.
+    // Blank it out so a name such as 周一例会 is not read as a date.
+    int tags = 0;
+    for (int at = text.indexOf('#'); at >= 0; at = text.indexOf('#', at + 1)) {
+        int length = 0;
+        for (const auto &category : categories) {
+            const int size = category.name.size(), end = at + 1 + size;
+            if (size >= length && startsTag(text, at) &&
+                source.midRef(at + 1, size).compare(category.name, Qt::CaseInsensitive) == 0 &&
+                (end == source.size() || source.at(end).isSpace())) {
+                length = size + 1;
+                out.group = category.id;
+            }
+        }
+        if (!length)
+            continue;
+        ++tags;
+        out.spans << EntrySpan{at, length};
+        text.replace(at, length, QString(length, ' '));
+    }
     QList<Token> dates;
     auto addDates = [&](const QString &pattern) {
         for (auto t : tokens(text, pattern))
@@ -111,6 +144,10 @@ ParsedEntry parseEntry(const QString &source, const QDate &today) {
         out.spans << EntrySpan{t.start, t.length};
     for (const auto &t : times)
         out.spans << EntrySpan{t.start, t.length};
+    if (tags > 1) {
+        out.error = "存在多个类型，请只保留一个";
+        return out;
+    }
     if (dates.size() > 1 || times.size() > 1) {
         out.error = "存在多个日期或时间，请只保留一个";
         return out;

@@ -58,7 +58,10 @@ QIcon drawnIcon(const std::function<void(QPainter &)> &draw) {
     p.scale(theme::textScale, theme::textScale);
     p.setPen(QPen(theme::color("ink-muted"), 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     draw(p);
-    return QIcon(pixmap);
+    QIcon icon(pixmap);
+    // Qt tints a selected row's icon, which would change a category's colour.
+    icon.addPixmap(pixmap, QIcon::Selected);
+    return icon;
 }
 // A button inside a line edit, drawn on a 16-unit grid scaled by the Windows text size.
 class FieldButton : public QAbstractButton {
