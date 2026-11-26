@@ -163,6 +163,8 @@ bool Controller::leaveEditor() {
     const auto result = QMessageBox::StandardButton(box.exec());
     if (result == QMessageBox::Cancel) {
         // The list highlight returns to the item still being edited.
+        for (auto list : {all, pins, tasks, plans, dayItems, floatDay})
+            list->setCurrentRow(-1);
         updateLists();
         return false;
     }

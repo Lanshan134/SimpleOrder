@@ -17,8 +17,10 @@ SmartEntry::SmartEntry(QWidget *parent) : QPlainTextEdit(parent) {
             auto cursor = textCursor();
             const int end = cursor.position();
             const QString tag = "#" + category.name + " ";
-            if (toPlainText().size() - (end - start) + tag.size() > 1000)
+            if (toPlainText().size() - (end - start) + tag.size() > 1000) {
+                showLengthLimit();
                 return;
+            }
             cursor.setPosition(start);
             cursor.setPosition(end, QTextCursor::KeepAnchor);
             cursor.insertText(tag);
@@ -104,6 +106,7 @@ void SmartEntry::keyPressEvent(QKeyEvent *event) {
     if (!event->text().isEmpty() && event->text().at(0).isPrint() &&
         !(event->modifiers() & Qt::ControlModifier) &&
         toPlainText().size() - textCursor().selectedText().size() + event->text().size() > 1000) {
+        showLengthLimit();
         event->accept();
         return;
     }
@@ -112,6 +115,12 @@ void SmartEntry::keyPressEvent(QKeyEvent *event) {
 void SmartEntry::insertFromMimeData(const QMimeData *data) {
     auto text = data->text();
     text.replace(QRegularExpression("[\\r\\n]+"), " ");
-    text = text.left(qMax(0, 1000 - toPlainText().size() + textCursor().selectedText().size()));
-    textCursor().insertText(text);
+    const int room = qMax(0, 1000 - toPlainText().size() + textCursor().selectedText().size());
+    if (text.size() > room)
+        showLengthLimit();
+    textCursor().insertText(text.left(room));
+}
+// Input stops at 1000 characters; say so rather than drop a key, a paste or a suggestion silently.
+void SmartEntry::showLengthLimit() {
+    QToolTip::showText(mapToGlobal(QPoint(0, height())), "最多输入 1000 个字符", this);
 }

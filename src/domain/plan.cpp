@@ -151,5 +151,6 @@ void validatePlan(const Item &i) {
 }
 bool reschedulable(const Item &item) {
     const auto kind = item.rule.value("kind").toString();
-    return item.type != "plan" || kind == "interval" || kind == "dates";
+    // Plans from before rules (empty rule) occur on their date, like tasks.
+    return item.type != "plan" || item.rule.isEmpty() || kind == "interval" || kind == "dates";
 }

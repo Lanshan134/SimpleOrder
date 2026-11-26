@@ -219,8 +219,9 @@ void Controller::updateLists() {
     const QString dayWord = relativeDay(day, QDate::currentDate());
     dateLabel->setText((dayWord.isEmpty() ? QString() : dayWord + " · ") + QLocale().toString(day, "M月d日 ddd") +
                        QString(" · %1 项").arg(dayRows.size()));
+    // A list without a keyboard row of its own highlights the item being edited.
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {
-        for (int n = 0; n < list->count(); ++n)
+        for (int n = 0; n < list->count() && list->currentRow() < 0; ++n)
             if (selected && list->item(n)->data(Qt::UserRole).toLongLong() == selected)
                 list->setCurrentRow(n);
         list->verticalScrollBar()->setValue(positions.value(list));
@@ -339,7 +340,7 @@ void Controller::schedule(qint64 id, QDate d) {
             if (!reschedulable(i))
                 return;
             i.date = d.toString(Qt::ISODate);
-            if (i.type == "plan") {
+            if (i.type == "plan" && !i.rule.isEmpty()) {
                 if (i.rule.value("kind").toString() == "interval")
                     i.rule.insert("first", i.date);
                 else {
@@ -366,7 +367,8 @@ bool Controller::add(const QString &t, QDate d) {
     const auto parsed = parseEntry(t, QDate::currentDate(), currentCategories());
     if (!parsed.error.isEmpty())
         throw std::runtime_error(parsed.error.toUtf8().constData());
-    if (!leaveEditor())
+    // The independent editor keeps its item and draft, so there is nothing to ask about.
+    if (!itemWindow && !leaveEditor())
         return false;
     if (parsed.date.isValid())
         d = parsed.date;
@@ -378,9 +380,10 @@ bool Controller::add(const QString &t, QDate d) {
     i.date = d.isValid() ? d.toString(Qt::ISODate) : QString();
     i.time = parsed.time.isValid() ? parsed.time.toString("HH:mm") : QString();
     const qint64 id = store.save(i).id;
-    if (!itemWindow)
+    if (!itemWindow) {
         selected = id;
-    dirty = false;
+        dirty = false;
+    }
     if (d.isValid())
         day = d;
     refresh();

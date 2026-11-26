@@ -140,6 +140,14 @@ void Controller::interactionSmokeTest(const QString &dir) {
     settingsWindow->reject();
     QApplication::processEvents();
     require(calls.isEmpty() && !stored(a).done, "preview circle neither completes nor opens the item");
+    // In preview nothing can be dragged, but a press that moves past the drag distance is still no click.
+    settingsDialog();
+    send(view, QEvent::MouseButtonPress, at(tasks, a, body), Qt::LeftButton, Qt::LeftButton);
+    send(view, QEvent::MouseMove, at(tasks, a, body + 25), Qt::NoButton, Qt::LeftButton);
+    send(view, QEvent::MouseButtonRelease, at(tasks, a, body + 25), Qt::LeftButton, Qt::NoButton);
+    settingsWindow->reject();
+    QApplication::processEvents();
+    require(calls.isEmpty(), "a drag in preview does not open the item");
     // D4: only the left button drags an item.
     {
         DragProbe probe;
@@ -166,8 +174,27 @@ void Controller::interactionSmokeTest(const QString &dir) {
         QApplication::sendEvent(tasks, &space);
     }
     updateLists();
-    require(stored(a).done && tasks->currentItem() && tasks->currentItem()->data(Qt::UserRole).toLongLong() == a,
-            "Space completes once and the keyboard stays on the item");
+    require(stored(a).done && tasks->currentItem() &&
+                tasks->currentItem()->data(Qt::UserRole).toLongLong() == a &&
+                tasks->currentItem()->isSelected(),
+            "Space completes once and the keyboard stays on the item, still highlighted");
+    // The same after an item was opened and its editor closed: the keyboard row is not pulled back to it.
+    reset();
+    QTimer::singleShot(0, this, [&] {
+        if (itemWindow)
+            itemWindow->close();
+    });
+    editFloatingItem(a);
+    tasks->setFocus();
+    tasks->setCurrentRow(tasks->row(tasks->itemAt(at(tasks, c, body))));
+    QKeyEvent space(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier, " ");
+    QApplication::sendEvent(tasks, &space);
+    updateLists();
+    require(selected == a && stored(c).done && !stored(a).done && tasks->currentItem() &&
+                tasks->currentItem()->data(Qt::UserRole).toLongLong() == c,
+            "after the editor closes, refreshing keeps the keyboard row");
+    QApplication::sendEvent(tasks, &space);
+    require(!stored(c).done && !stored(a).done, "the next Space toggles the same item, not the opened one");
     reset();
     all->setCurrentRow(all->row(all->itemAt(at(all, later, body))));
     store.remove(later);
@@ -226,6 +253,24 @@ void Controller::interactionSmokeTest(const QString &dir) {
     });
     editFloatingItem(a);
     require(kept, "independent editor keeps its item");
+    // A quick add leaves the independent editor's draft alone, without asking.
+    reset();
+    prompts = 0;
+    answer = QMessageBox::Cancel;
+    watch.start();
+    bool draftKept = false;
+    QTimer::singleShot(0, this, [&] {
+        if (!itemWindow)
+            return;
+        title->setText("交互甲 草稿");
+        const bool added = add("交互快速添加二");
+        draftKept =
+            added && prompts == 0 && selected == a && title->text() == "交互甲 草稿" && hasEditorChanges();
+        itemWindow->close();
+    });
+    editFloatingItem(a);
+    watch.stop();
+    require(draftKept, "a quick add keeps the independent editor's draft without asking");
     // D9: a press right after a click still drags the window.
     reset();
     auto handle = floating->findChild<QLabel *>("windowTitle");
@@ -260,6 +305,17 @@ void Controller::interactionSmokeTest(const QString &dir) {
             "completing, pinning and rescheduling do not ask about the draft");
     saveEditor();
     require(stored(a).done && stored(a).title == "交互甲 草稿", "saving the draft keeps its own completion");
+    // Pinning or rescheduling the draft's own item still asks; Cancel leaves the item and the draft.
+    title->setText("交互甲 草稿二");
+    prompts = 0;
+    answer = QMessageBox::Cancel;
+    tasks->togglePin(a);
+    schedule(a, today.addDays(9));
+    require(prompts == 2 && !stored(a).pinned && stored(a).date == today.toString(Qt::ISODate) &&
+                title->text() == "交互甲 草稿二" && selected == a,
+            "pinning or rescheduling the draft's own item asks first");
+    dirty = false;
+    fillEditor();
     watch.stop();
     for (auto id : {a, b, c}) {
         auto i = stored(id);
@@ -281,6 +337,8 @@ void Controller::interactionSmokeTest(const QString &dir) {
             plans << plan;
         }
         DragProbe probe;
+        int clicks = 0;
+        probe.edit = probe.complete = [&](qint64) { ++clicks; };
         probe.setAttribute(Qt::WA_DontShowOnScreen);
         probe.resize(300, 200);
         probe.fill(plans);
@@ -297,10 +355,25 @@ void Controller::interactionSmokeTest(const QString &dir) {
         refresh();
         schedule(plans[0].id, today.addDays(3));
         require(probe.drags == 2, qPrintable(QString("only interval and chosen-day plans drag (%1)").arg(probe.drags)));
+        require(clicks == 0,
+                "a press moved past the drag distance is no click, whether or not the item drags");
         require(stored(plans[0].id).rule == before.rule && stored(plans[0].id).date == before.date,
                 "a count plan does not reschedule");
         for (const auto &plan : plans)
             store.remove(plan.id);
+        // A plan saved before plans had rules moves by its date, like a task.
+        Item legacy;
+        legacy.type = "plan";
+        legacy.title = "交互旧计划";
+        legacy.date = today.toString(Qt::ISODate);
+        legacy.target = 2;
+        legacy.id = store.save(legacy).id;
+        refresh();
+        schedule(legacy.id, today.addDays(3));
+        require(reschedulable(legacy) && stored(legacy.id).date == today.addDays(3).toString(Qt::ISODate) &&
+                    stored(legacy.id).rule.isEmpty(),
+                "a plan without a rule reschedules by its date");
+        store.remove(legacy.id);
     }
     tasks->edit = edit;
     tasks->complete = complete;

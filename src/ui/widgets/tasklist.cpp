@@ -135,7 +135,7 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
         if (pressedButton != Qt::LeftButton)
             return;
         auto id = i->data(Qt::UserRole).toLongLong();
-        if (!id || pressedCheck != releasedCheck)
+        if (!id || pressedCheck != releasedCheck || movedPastDrag)
             return;
         if (pressedCheck) {
             // A mouse completion leaves no keyboard position behind, as before.
@@ -158,6 +158,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
     // Refilling keeps the keyboard position: the same item, or the nearest item row if it has gone.
     const qint64 currentId = currentItem() ? currentItem()->data(Qt::UserRole).toLongLong() : 0;
     const int currentIndex = currentRow();
+    const bool currentSelected = currentItem() && currentItem()->isSelected();
     clear();
     int last = -1;
     const QDate today = QDate::currentDate();
@@ -227,7 +228,8 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
             if (item(n)->data(Qt::UserRole).toLongLong())
                 restore = n;
         if (restore >= 0)
-            setCurrentRow(restore, QItemSelectionModel::NoUpdate);
+            setCurrentRow(restore, currentSelected ? QItemSelectionModel::ClearAndSelect
+                                                   : QItemSelectionModel::NoUpdate);
     }
     viewport()->update();
 }

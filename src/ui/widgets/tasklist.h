@@ -1,5 +1,6 @@
 #pragma once
 #include "domain/item.h"
+#include <QApplication>
 #include <QListWidget>
 #include <QMouseEvent>
 #include <functional>
@@ -16,6 +17,9 @@ class TaskList : public QListWidget {
     qreal wheelRemainder = 0;
     // A click completes or edits only when it is pressed and released in the same zone of the row.
     bool pressedCheck = false, releasedCheck = false, pressedMovable = false;
+    // A press that moves past the drag distance is a drag, even where nothing can be dragged.
+    bool movedPastDrag = false;
+    QPoint pressedAt;
     bool inCheck(const QPoint &p) const;
 
   public:
@@ -31,6 +35,8 @@ class TaskList : public QListWidget {
     void mousePressEvent(QMouseEvent *event) override {
         pressedButton = event->button();
         pressedCheck = inCheck(event->pos());
+        pressedAt = event->pos();
+        movedPastDrag = false;
         const auto row = itemAt(event->pos());
         pressedMovable = row && row->data(Qt::UserRole + 7).toBool();
         QListWidget::mousePressEvent(event);
@@ -46,6 +52,9 @@ class TaskList : public QListWidget {
     }
     // Only a left press on an item with a date to move drags it to the calendar.
     void mouseMoveEvent(QMouseEvent *event) override {
+        if (event->buttons() != Qt::NoButton &&
+            (event->pos() - pressedAt).manhattanLength() >= QApplication::startDragDistance())
+            movedPastDrag = true;
         if (event->buttons() == Qt::NoButton || (pressedButton == Qt::LeftButton && pressedMovable))
             QListWidget::mouseMoveEvent(event);
     }

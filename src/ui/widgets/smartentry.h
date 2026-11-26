@@ -9,6 +9,7 @@ class SmartEntry : public QPlainTextEdit {
     Q_OBJECT
     std::function<bool(const QString &)> submit;
     void updatePreview();
+    void showLengthLimit();
     bool composing = false;
     CategoryPopup *categoryPopup;
 

@@ -1477,6 +1477,17 @@ void Controller::categoryTagSmokeTest(const QString &directory) {
     write(quick, "开会 #工");
     manager->grab().save(directory + "/category-popup-manager.png");
     quick->clear();
+    // A suggestion that would pass the 1000-character limit says why it is not taken.
+    QToolTip::hideText();
+    quick->setPlainText(QString(995, QChar('x')));
+    quick->moveCursor(QTextCursor::End);
+    write(quick, " #工");
+    check(names(quick).size() == 2, "suggestions open near the length limit");
+    press(quick, Qt::Key_Return);
+    check(quick->toPlainText().endsWith(" #工") && QToolTip::text() == "最多输入 1000 个字符",
+          "a suggestion past the length limit explains why it is not taken");
+    QToolTip::hideText();
+    quick->clear();
 
     // The list must stay readable over a see-through floating window.
     const auto opacity = settings.value("opacity", 100), textOpacity = settings.value("textOpacity", 100);
