@@ -1082,6 +1082,16 @@ void Controller::dateLabelSmokeTest(const QString &directory) {
         for (auto back : {"surface", "canvas", "row-hover", "selection"})
             check((luminance(theme::color(back)) + .05) / (luminance(theme::color(ink)) + .05) >= 4.5,
                   "date colours stay readable on every row background");
+    // The floating window's light text maps both sides; tomorrow's colour included (#2, #7).
+    QWidget lightText;
+    lightText.setProperty("lightText", true);
+    for (auto ink : {"ink", "ink-muted", "accent-ink", "danger", "tomorrow"})
+        for (auto back : {"surface", "canvas", "row-hover", "selection"}) {
+            const qreal front = luminance(floatingTone(&lightText, theme::color(ink), "foregroundOpacity")),
+                        under = luminance(floatingTone(&lightText, theme::color(back), "surfaceOpacity"));
+            check(under < front && (front + .05) / (under + .05) >= 4.5,
+                  qPrintable(QString("light %1 stays readable on %2").arg(ink, back)));
+        }
 
     auto paint = [&](int urgencyValue, bool isDone) {
         QStandardItemModel model(1, 1);

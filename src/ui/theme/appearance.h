@@ -20,8 +20,8 @@ QColor foregroundColor(const QWidget *widget, QColor color);
 // Light-text counterpart of a palette colour when the floating window uses light text.
 QColor floatingTone(const QWidget *widget, QColor color, const char *key);
 class QGraphicsEffect;
-// Outlines everything drawn in an area so it stays legible over any desktop.
-QGraphicsEffect *haloEffect(const QWidget *window);
+// Outlines everything drawn in an area so it stays legible over any desktop; set it on that area.
+QGraphicsEffect *haloEffect(const QWidget *window, QWidget *area);
 int scaled(const QWidget *widget, int value);
 // The categories in their settings order, as last loaded.
 const QList<Category> &currentCategories();

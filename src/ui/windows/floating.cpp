@@ -342,7 +342,7 @@ void Controller::applyFloatingAppearance() {
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setVisible(settings.value("frameless", true).toBool());
     for (auto area : {floating->findChild<QLabel *>("windowTitle")->parentWidget(), static_cast<QWidget *>(stack)})
-        area->setGraphicsEffect(halo ? haloEffect(floating) : nullptr);
+        area->setGraphicsEffect(halo ? haloEffect(floating, area) : nullptr);
     if (visible)
         floating->show();
     scaleFloating(true);

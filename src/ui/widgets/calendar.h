@@ -40,4 +40,5 @@ class Calendar : public QCalendarWidget {
   private:
     QDate hoverDate, dropDate;
     void updateHeader();
+    void updateDate(const QDate &);
 };

@@ -227,6 +227,17 @@ void Calendar::updateHeader() {
     todayButton->setEnabled(selectedDate() != today || yearShown() != today.year() ||
                             monthShown() != today.month());
 }
+void Calendar::updateDate(const QDate &date) {
+    auto table = findChild<QAbstractItemView *>();
+    if (!table || !date.isValid())
+        return;
+    for (int row = 1; row < table->model()->rowCount(); ++row)
+        for (int column = 0; column < table->model()->columnCount(); ++column) {
+            const QRect cell = table->visualRect(table->model()->index(row, column));
+            if (dateAt(table->viewport()->mapTo(this, cell.center())) == date)
+                table->viewport()->update(cell);
+        }
+}
 QDate Calendar::dateAt(const QPoint &p) const {
     auto table = findChild<QAbstractItemView *>();
     if (!table)
@@ -281,8 +292,9 @@ bool Calendar::eventFilter(QObject *watched, QEvent *event) {
         if (auto viewport = qobject_cast<QWidget *>(watched); viewport && event->type() == QEvent::MouseMove)
             under = dateAt(viewport->mapTo(this, static_cast<QMouseEvent *>(event)->pos()));
         if (under != hoverDate) {
+            updateDate(hoverDate);
             hoverDate = under;
-            updateCells();
+            updateDate(under);
         }
     }
     if (!displayOutside &&

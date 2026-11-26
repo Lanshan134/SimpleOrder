@@ -95,6 +95,64 @@ void Controller::floatingSmokeTest(const QString &directory) {
     require(translucent.pixelColor(gap).alpha() ==
                 translucent.pixelColor(5, floating->height() / 2).alpha(),
             "calendar page background follows the window opacity");
+    // A hover repaints only the cells it leaves and enters, with and without the halo, and the halo outlines
+    // such a part exactly as it does the whole page (#2).
+    {
+        auto grid = floatCal->findChild<QTableView *>();
+        struct PaintSpy : QObject {
+            QRect painted;
+            bool eventFilter(QObject *, QEvent *event) override {
+                if (event->type() == QEvent::Paint)
+                    painted |= static_cast<QPaintEvent *>(event)->rect();
+                return false;
+            }
+        } spy;
+        grid->viewport()->installEventFilter(&spy);
+        const QRect from = grid->visualRect(grid->model()->index(3, 2)),
+                    to = grid->visualRect(grid->model()->index(3, 3));
+        const auto hover = [&](QPoint at) {
+            QMouseEvent move(QEvent::MouseMove, at, grid->viewport()->mapToGlobal(at), Qt::NoButton,
+                             Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(grid->viewport(), &move);
+            settle();
+        };
+        for (int opacity : {20, 100}) {
+            settings.setValue("opacity", opacity);
+            applyFloatingAppearance();
+            settle();
+            hover(from.center());
+            spy.painted = {};
+            hover(to.center());
+            require(!spy.painted.isEmpty() && (from | to).adjusted(-8, -8, 8, 8).contains(spy.painted),
+                    QString("a hover repaints only its two cells (opacity %1, painted %2x%3)")
+                        .arg(opacity)
+                        .arg(spy.painted.width())
+                        .arg(spy.painted.height()));
+        }
+        settings.setValue("opacity", 20);
+        applyFloatingAppearance();
+        settle();
+        QPoint corner = grid->viewport()->mapTo(floating, from.topLeft());
+        corner = QPoint(corner.x() / 4 * 4, corner.y() / 4 * 4);
+        const QRect part(corner, from.size() * 2);
+        const QImage whole = floating->grab().toImage().convertToFormat(QImage::Format_ARGB32);
+        const QImage piece = floating->grab(part).toImage().convertToFormat(QImage::Format_ARGB32);
+        const qreal ratio = whole.devicePixelRatio();
+        const QImage expected = whole.copy(QRect(part.topLeft() * ratio, piece.size()));
+        int differ = 0;
+        for (int y = 0; y < piece.height(); ++y)
+            for (int x = 0; x < piece.width(); ++x) {
+                const QRgb a = piece.pixel(x, y), b = expected.pixel(x, y);
+                differ += qMax(qMax(qAbs(qRed(a) - qRed(b)), qAbs(qGreen(a) - qGreen(b))),
+                               qMax(qAbs(qBlue(a) - qBlue(b)), qAbs(qAlpha(a) - qAlpha(b)))) > 8;
+            }
+        require(
+            differ == 0,
+            QString("the halo outlines a repainted part like the whole page (%1 pixels differ)").arg(differ));
+        QEvent leave(QEvent::Leave);
+        QApplication::sendEvent(grid->viewport(), &leave);
+        grid->viewport()->removeEventFilter(&spy);
+    }
     settings.setValue("opacity", 100);
     applyFloatingAppearance();
 

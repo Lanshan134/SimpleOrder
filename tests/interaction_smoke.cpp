@@ -367,6 +367,20 @@ void Controller::interactionSmokeTest(const QString &dir) {
         painter.drawImage(0, 0, floating->grab().toImage());
     }
     dark.save(dir + "/floating-light-text-20-over-dark.png");
+    // Opaque, the calendar page's day list is a dark panel under light text too.
+    opacity->setValue(100);
+    stack->setCurrentIndex(1);
+    setDate(today.addDays(40));
+    QApplication::processEvents();
+    const QImage lightCalendar = floating->grab().toImage();
+    lightCalendar.save(dir + "/floating-light-text-calendar.png");
+    require(floatDay->count() == 0 &&
+                lightCalendar.pixelColor(floatDay->mapTo(floating, QPoint(4, floatDay->height() / 2)))
+                        .lightness() < 80,
+            "the day list is a dark panel under light text");
+    stack->setCurrentIndex(0);
+    setDate(today);
+    opacity->setValue(20);
     tone->setCurrentIndex(tone->findData("dark"));
     {
         QPainter painter(&dark);
