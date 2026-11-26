@@ -92,6 +92,7 @@ class Controller : public QObject {
     void settingsDialog();
     void layoutSmokeTest(const QString &directory);
     void floatingSmokeTest(const QString &directory);
+    void scrollbarSmokeTest(const QString &directory);
     void editorLayoutSmokeTest(const QString &directory);
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);

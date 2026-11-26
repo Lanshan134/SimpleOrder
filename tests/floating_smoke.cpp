@@ -273,6 +273,87 @@ void Controller::floatingSmokeTest(const QString &directory) {
     }
 }
 
+// The page's scrollbar and the day list's are told apart by place, width and track (#21).
+void Controller::scrollbarSmokeTest(const QString &directory) {
+    const auto require = [](bool ok, const QString &label) {
+        if (!ok)
+            throw std::runtime_error(label.toStdString());
+    };
+    const auto settle = [] {
+        for (int pass = 0; pass < 4; ++pass)
+            QApplication::processEvents();
+    };
+    const QDate busy(2026, 12, 1), quiet(2026, 12, 2);
+    for (int n = 0; n < 20; ++n) {
+        Item item;
+        item.title = QString("滚动条事项 %1").arg(n + 1);
+        item.date = busy.toString(Qt::ISODate);
+        store.save(item);
+    }
+    Item one;
+    one.title = "单条事项";
+    one.date = quiet.toString(Qt::ISODate);
+    store.save(one);
+    refresh();
+    settings.setValue("scaleWithWindow", false);
+    floating->show();
+    stack->setCurrentIndex(1);
+    auto page = floating->findChild<QScrollArea *>("floatingCalendarScroll");
+    auto outer = page->verticalScrollBar(), inner = floatDay->verticalScrollBar();
+    const auto box = [&](QWidget *widget) { return QRect(widget->mapTo(floating, QPoint()), widget->size()); };
+    const auto show = [&](QSize size, QDate date, int opacity) {
+        settings.setValue("opacity", opacity);
+        applyFloatingAppearance();
+        floating->resize(size);
+        scaleFloating(true);
+        setDate(date);
+        settle();
+        outer->setValue(outer->maximum());
+        inner->setValue(0);
+        settle();
+        return floating->grab().toImage();
+    };
+    auto image = show(QSize(390, 340), busy, 100);
+    require(outer->isVisible() && inner->isVisible(), "both bars show on a short page with a long list");
+    const QRect pageBar = box(outer), listBar = box(inner), list = box(floatDay);
+    require(pageBar.width() >= 2 * listBar.width() && listBar.right() < pageBar.left() &&
+                2 * pageBar.height() > 3 * listBar.height() && list.contains(listBar),
+            "the page bar is wide and runs the page; the list bar is thin and inside the list");
+    floating->grab().save(directory + "/floating-scrollbars.png");
+    const QColor track = image.pixelColor(pageBar.center().x() + 2, pageBar.top() + 3);
+    const QColor panel = image.pixelColor(list.left() + 3, list.bottom() - 3);
+    const QColor surface = image.pixelColor(page->mapTo(floating, QPoint(2, 2)));
+    require(track.rgb() == theme::color("line").rgb() && panel.rgb() == theme::color("canvas").rgb() &&
+                surface.rgb() != panel.rgb() && surface.rgb() != track.rgb(),
+            "the page bar has a track and the day list sits on its own panel");
+    require(image.pixelColor(pageBar.left() + 1, pageBar.top() + 3).rgb() != track.rgb(),
+            "a gap separates the page bar from the list");
+    // Each bar moves only what it belongs to.
+    outer->setValue(0);
+    inner->setValue(0);
+    outer->setValue(outer->maximum());
+    require(inner->value() == 0, "the page bar leaves the list");
+    inner->setValue(inner->maximum());
+    require(outer->value() == outer->maximum(), "the list bar leaves the page");
+    // Alone, each bar still reads as its region's.
+    show(QSize(420, 480), busy, 100);
+    require(!outer->isVisible() && inner->isVisible() && box(floatDay).contains(box(inner)),
+            "the list bar alone stays inside the list panel");
+    floating->grab().save(directory + "/floating-scrollbar-list.png");
+    show(QSize(390, 340), quiet, 100);
+    require(outer->isVisible() && !inner->isVisible() && box(outer).height() > box(floatDay).height(),
+            "the page bar alone runs the page");
+    // Handles stay visible on a fully see-through window.
+    image = show(QSize(390, 340), busy, 0);
+    const QRect handleSpot = box(inner);
+    require(image.pixelColor(box(outer).center().x() + 2, box(outer).bottom() - 10).alpha() >= 170 &&
+                image.pixelColor(handleSpot.center().x(), handleSpot.top() + 8).alpha() >= 170,
+            "scrollbar handles stay visible without a background");
+    floating->grab().save(directory + "/floating-scrollbars-clear.png");
+    settings.setValue("opacity", 100);
+    applyFloatingAppearance();
+}
+
 // Stretching the editor gives the height to the notes instead of an empty band (#9).
 void Controller::editorLayoutSmokeTest(const QString &directory) {
     QStringList failures;

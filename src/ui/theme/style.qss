@@ -80,6 +80,13 @@ QScrollBar::handle:vertical { background:@handle; border-radius:4px; min-height:
 QScrollBar::handle:vertical:hover { background:@handle-hover; }
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
 QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical { background:transparent; }
+/* Floating calendar: the page's bar has a track at the window edge; the day list is a panel with a thin bar of its own. */
+QScrollArea#floatingCalendarScroll > QWidget > QScrollBar:vertical { width:14px; margin:0 0 0 4px; background:@line; border-radius:5px; }
+QScrollArea#floatingCalendarScroll > QWidget > QScrollBar::handle:vertical { background:@handle-hover; border-radius:5px; }
+QScrollArea#floatingCalendarScroll > QWidget > QScrollBar::handle:vertical:hover { background:@control-border; }
+QListWidget#floatingDay { background:@canvas; border-radius:6px; }
+QListWidget#floatingDay QScrollBar:vertical { width:6px; margin:2px 1px; }
+QListWidget#floatingDay QScrollBar::handle:vertical { border-radius:2px; min-height:16px; }
 
 QMenu { background:@surface; border:1px solid @line-strong; padding:4px; }
 QMenu::item { padding:6px 16px; border-radius:4px; font-size:14px; }

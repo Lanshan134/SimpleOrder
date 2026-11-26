@@ -110,6 +110,7 @@ void Controller::buildFloating() {
     floatCal->wheelChangesMonth = false;
     calendarLayout->addWidget(floatCal, 1);
     floatDay = new TaskList;
+    floatDay->setObjectName("floatingDay");
     floatDay->setAccessibleName("选中日期的事项");
     floatDay->setProperty("dayList", true);
     floatDay->setProperty("emptyText", "这一天没有事项");
@@ -227,6 +228,12 @@ void Controller::scaleFloating(bool force) {
         }
         return out + text.mid(position);
     };
+    const qreal textAlpha = floating->property("foregroundOpacity").isValid()
+                                ? floating->property("foregroundOpacity").toDouble()
+                                : 1.0;
+    // Scrollbar handles are controls: like quick add they stay visible however see-through the background is.
+    style = recolor(style, QRegularExpression("(::handle:vertical[^{}]*\\{[^{}]*background\\s*:\\s*)(#[a-fA-F0-9]{6})\\b"),
+                    qMax(textAlpha, 0.7));
     style = recolor(
         style, QRegularExpression("((?:background|background-color)\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
         floating->backgroundOpacity);
@@ -236,9 +243,6 @@ void Controller::scaleFloating(bool force) {
                                                           : 1.0);
     // Control borders fade with the text. Quick add is the window's main action: its fill ignores the
     // see-through background and stops fading at 70%, so it never reads as disabled.
-    const qreal textAlpha = floating->property("foregroundOpacity").isValid()
-                                ? floating->property("foregroundOpacity").toDouble()
-                                : 1.0;
     style = recolor(style, QRegularExpression("(border(?:-[a-z]+)?\\s*:\\s*[^;{}#]*)(#[a-fA-F0-9]{6})\\b"),
                     textAlpha);
     const auto fill = [textAlpha](const char *token) {
