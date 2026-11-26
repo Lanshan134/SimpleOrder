@@ -478,6 +478,7 @@ bool Controller::smokeTest(const QString &dir) {
     floatingSmokeTest(dir);
     scrollbarSmokeTest(dir);
     editorLayoutSmokeTest(dir);
+    calendarSmokeTest(dir);
 
     return true;
 }
@@ -856,11 +857,12 @@ void Controller::draftSmokeTest(const QString &dir) {
     applyFloatingAppearance();
     const auto monthTitle = [](QDate d) { return QString("%1 年 %2 月").arg(d.year()).arg(d.month()); };
     setDate(QDate::currentDate().addMonths(2));
-    require(floatCal->titleButton->text() == monthTitle(QDate::currentDate().addMonths(2)) &&
-                cal->titleButton->text() == floatCal->titleButton->text() && floatCal->todayButton->isEnabled(),
+    const auto shownTitle = [](Calendar *c) { return c->yearButton->text() + " " + c->monthButton->text(); };
+    require(shownTitle(floatCal) == monthTitle(QDate::currentDate().addMonths(2)) &&
+                shownTitle(cal) == shownTitle(floatCal) && floatCal->todayButton->isEnabled(),
             "month title follows the selected date");
     setDate(QDate::currentDate());
-    require(floatCal->titleButton->text() == monthTitle(QDate::currentDate()) && !floatCal->todayButton->isEnabled(),
+    require(shownTitle(floatCal) == monthTitle(QDate::currentDate()) && !floatCal->todayButton->isEnabled(),
             "today control rests when today is showing");
     for (int pass = 0; pass < 3; ++pass)
         QApplication::processEvents();

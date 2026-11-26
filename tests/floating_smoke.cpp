@@ -163,7 +163,7 @@ void Controller::floatingSmokeTest(const QString &directory) {
     wheelAt(floatCal->parentWidget(), QPoint(60, floatCal->geometry().bottom() + 3), 120);
     require(pageBar->value() < pageBar->maximum(), "wheel between the grid and the list scrolls the page");
     prepare(3, false);
-    wheelAt(floatCal->titleButton, QPoint(10, 8), -120);
+    wheelAt(floatCal->yearButton, QPoint(10, 8), -120);
     require(pageBar->value() > 0, "wheel over the month bar scrolls the page");
     // Touchpad steps are carried over instead of being rounded away.
     prepare(8, false);

@@ -16,7 +16,7 @@ class Calendar : public QCalendarWidget {
     int retentionHours = 48, maxDots = 3;
     QList<Item> items;
     std::function<void(qint64, QDate)> schedule;
-    QPushButton *titleButton = nullptr, *todayButton = nullptr;
+    QPushButton *yearButton = nullptr, *monthButton = nullptr, *todayButton = nullptr;
     explicit Calendar(QWidget *parent = nullptr);
     void repaintCells() {
         updateCells();
@@ -35,5 +35,4 @@ class Calendar : public QCalendarWidget {
   private:
     QDate hoverDate, dropDate;
     void updateHeader();
-    void chooseMonth();
 };

@@ -24,6 +24,7 @@ add_executable(SimpleOrder WIN32
     src/ui/windows/manager.cpp
     src/ui/windows/settings.cpp
     src/ui/windows/window.cpp
+    tests/calendar_smoke.cpp
     tests/entryparser_tests.cpp
     tests/floating_smoke.cpp
     tests/settings_smoke.cpp

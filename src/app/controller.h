@@ -94,6 +94,7 @@ class Controller : public QObject {
     void floatingSmokeTest(const QString &directory);
     void scrollbarSmokeTest(const QString &directory);
     void editorLayoutSmokeTest(const QString &directory);
+    void calendarSmokeTest(const QString &directory);
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);

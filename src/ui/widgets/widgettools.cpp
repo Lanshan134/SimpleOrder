@@ -219,6 +219,8 @@ void attachDatePicker(QLineEdit *edit, std::function<void()> onDateSelected) {
         auto layout = new QVBoxLayout(popup);
         layout->setContentsMargins(8, 8, 8, 8);
         auto calendar = new Calendar;
+        // The header grows with the text size, so the grid does too.
+        calendar->setMinimumSize(calendar->minimumSize() * theme::textScale);
         layout->addWidget(calendar);
         const QDate current = QDate::fromString(edit->text().trimmed(), Qt::ISODate);
         calendar->setSelectedDate(current.isValid() ? current : QDate::currentDate());

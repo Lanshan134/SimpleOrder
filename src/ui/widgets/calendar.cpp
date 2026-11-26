@@ -23,19 +23,40 @@ Calendar::Calendar(QWidget *parent) : QCalendarWidget(parent) {
     auto barLayout = new QHBoxLayout(bar);
     barLayout->setContentsMargins(0, 0, 0, 4);
     barLayout->setSpacing(2);
-    titleButton = button("", "calendarTitle");
-    titleButton->setToolTip("选择年份和月份");
+    yearButton = button("", "calendarTitle");
+    yearButton->setToolTip("选择年份");
+    monthButton = button("", "calendarTitle");
+    monthButton->setToolTip("选择月份");
+    for (bool years : {true, false}) {
+        auto owner = years ? yearButton : monthButton;
+        // No parent: a menu inside the floating window would take on its see-through stylesheet.
+        auto menu = new QMenu;
+        connect(this, &QObject::destroyed, menu, [menu] { delete menu; });
+        owner->setMenu(menu);
+        // Each entry keeps the other part of the page: years keep the month, months keep the year.
+        connect(menu, &QMenu::aboutToShow, this, [this, menu, years] {
+            menu->clear();
+            const int shown = years ? yearShown() : monthShown();
+            for (int value = years ? qMax(1, shown - 6) : 1; value <= (years ? qMin(9999, shown + 6) : 12); ++value) {
+                auto action = menu->addAction(QString(years ? "%1 年" : "%1 月").arg(value), this, [this, value, years] {
+                    setCurrentPage(years ? value : yearShown(), years ? monthShown() : value);
+                });
+                action->setCheckable(true);
+                action->setChecked(value == shown);
+            }
+        });
+    }
     todayButton = button("今天");
     auto previous = glyphButton(Glyph::Left, "上个月", "calendarArrow");
     auto next = glyphButton(Glyph::Right, "下个月", "calendarArrow");
-    barLayout->addWidget(titleButton);
+    barLayout->addWidget(yearButton);
+    barLayout->addWidget(monthButton);
     barLayout->addStretch();
     barLayout->addWidget(todayButton);
     barLayout->addWidget(previous);
     barLayout->addWidget(next);
     if (auto column = qobject_cast<QVBoxLayout *>(layout()))
         column->insertWidget(0, bar);
-    connect(titleButton, &QPushButton::clicked, this, [this] { chooseMonth(); });
     connect(todayButton, &QPushButton::clicked, this, [this] { setSelectedDate(QDate::currentDate()); });
     connect(previous, &QPushButton::clicked, this, &QCalendarWidget::showPreviousMonth);
     connect(next, &QPushButton::clicked, this, &QCalendarWidget::showNextMonth);
@@ -135,27 +156,13 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     p->restore();
 }
 void Calendar::updateHeader() {
-    if (!titleButton)
+    if (!yearButton)
         return;
-    titleButton->setText(QString("%1 年 %2 月").arg(yearShown()).arg(monthShown()));
+    yearButton->setText(QString("%1 年").arg(yearShown()));
+    monthButton->setText(QString("%1 月").arg(monthShown()));
     const QDate today = QDate::currentDate();
     todayButton->setEnabled(selectedDate() != today || yearShown() != today.year() ||
                             monthShown() != today.month());
-}
-void Calendar::chooseMonth() {
-    QMenu menu(this);
-    menu.addAction(QString("上一年（%1）").arg(yearShown() - 1),
-                   [this] { setCurrentPage(yearShown() - 1, monthShown()); });
-    menu.addAction(QString("下一年（%1）").arg(yearShown() + 1),
-                   [this] { setCurrentPage(yearShown() + 1, monthShown()); });
-    menu.addSeparator();
-    for (int month = 1; month <= 12; ++month) {
-        auto action = menu.addAction(QString("%1 月").arg(month),
-                                     [this, month] { setCurrentPage(yearShown(), month); });
-        action->setCheckable(true);
-        action->setChecked(month == monthShown());
-    }
-    menu.exec(titleButton->mapToGlobal(QPoint(0, titleButton->height())));
 }
 QDate Calendar::dateAt(const QPoint &p) const {
     auto table = findChild<QAbstractItemView *>();
