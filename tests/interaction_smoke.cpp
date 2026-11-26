@@ -1,4 +1,5 @@
 #include "app/controller.h"
+#include "ui/widgets/smartentry.h"
 #include "ui/windows/settings.h"
 
 namespace {
@@ -232,4 +233,25 @@ void Controller::interactionSmokeTest() {
     tasks->edit = edit;
     tasks->complete = complete;
     reset();
+    // #2: menus opened from the floating window stay opaque and legible whatever the window's opacity.
+    settings.setValue("opacity", 0);
+    settings.setValue("textOpacity", 45);
+    applyFloatingAppearance();
+    auto spare = new QMenu(floatCal);
+    spare->addAction("月份");
+    for (QMenu *menu : {tasks->createItemMenu(a), spare,
+                        stack->currentWidget()->findChild<SmartEntry *>()->createStandardContextMenu()}) {
+        menu->setAttribute(Qt::WA_DontShowOnScreen);
+        menu->popup(QPoint(100, 100));
+        QApplication::processEvents();
+        const QImage image = menu->grab().toImage();
+        const QColor inside = image.pixelColor(6, image.height() / 2);
+        require(inside.alpha() == 255 && inside.lightness() > 240 &&
+                    menu->palette().color(QPalette::WindowText).alpha() == 255,
+                "menus from the floating window stay opaque");
+        delete menu;
+    }
+    settings.setValue("opacity", 100);
+    settings.setValue("textOpacity", 100);
+    applyFloatingAppearance();
 }

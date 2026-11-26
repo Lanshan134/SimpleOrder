@@ -201,6 +201,11 @@ void Controller::scaleFloating(bool force) {
         offset = match.capturedEnd();
     }
     style += floatingBaseStyle.mid(offset);
+    // Menus opened from the window inherit this sheet but are windows of their own: they keep opaque colours.
+    QString menus = QString("QMenu{color:%1;}").arg(theme::color("ink").name());
+    for (const auto &rule : style.split('\n'))
+        if (rule.startsWith("QMenu"))
+            menus += rule;
     const auto recolor = [&](QString text, const QRegularExpression &pattern, qreal alpha) {
         QString out;
         int position = 0;
@@ -243,6 +248,7 @@ void Controller::scaleFloating(bool force) {
     style += QString("QPushButton#quickAdd{background:%1;}QPushButton#quickAdd:hover{background:%2;}"
                      "QPushButton#quickAdd:disabled{background:%3;}")
                  .arg(fill("accent"), fill("accent-hover"), fill("control-off"));
+    style += menus;
     floating->setStyleSheet(style);
     // Polishing resets each input's palette, so the placeholder's opacity goes on afterwards.
     for (auto input : floating->findChildren<QLineEdit *>()) {
