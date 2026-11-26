@@ -47,6 +47,39 @@ void smartEntryParserTests() {
     check(!parseEntry("四月三十一日开会", day).error.isEmpty(), "invalid Chinese day");
     check(parseEntry("学习第三点 项目三", day).spans.isEmpty(), "ordinary Chinese numerals retained");
     check(!parseEntry("九九九九九九年三月三日开会", day).error.isEmpty(), "oversized Chinese year rejected");
+    const QList<Category> groups{{"work", "工作", "#000000"},      {"room", "工作室", "#000000"},
+                                 {"proj", "项目", "#000000"},      {"projA", "项目 A", "#000000"},
+                                 {"cpp", "Cpp", "#000000"},        {"mon", "周一例会", "#000000"},
+                                 {"today", "今天计划", "#000000"}, {"sharp", "C#", "#000000"},
+                                 {"dept", "部门周一例会", "#000000"}};
+    auto tag = [&](const char *text, const char *name, const char *id) {
+        auto r = parseEntry(text, day, groups);
+        return r.error.isEmpty() && r.title == name && r.group == id && r.spans.size() == 1 && !r.date.isValid();
+    };
+    check(tag("开会 #工作", "开会", "work") && tag("#工作 开会", "开会", "work") &&
+              tag("开会 #工作 上午场", "开会 上午场", "work") && tag("开会#工作", "开会", "work") &&
+              tag("＃工作 开会", "开会", "work"),
+          "tag at the start, middle and end");
+    check(tag("开会 #工作室", "开会", "room") && tag("写 #项目 A 报告", "写 报告", "projA") &&
+              tag("写 #项目 报告", "写 报告", "proj"),
+          "longest category name wins");
+    check(tag("学习 #cPP", "学习", "cpp") && tag("学习 #C#", "学习", "sharp"), "case and names holding a hash");
+    check(tag("开会 #周一例会", "开会", "mon") && tag("#今天计划 整理", "整理", "today") &&
+              tag("开会 #部门周一例会", "开会", "dept"),
+          "a date inside a category name is not read");
+    p = parseEntry("会议 #工作 明天 18:00", day, groups);
+    check(p.title == "会议" && p.group == "work" && p.date == day.addDays(1) && p.time == QTime(18, 0) &&
+              p.spans.size() == 3 && p.spans[0].start == 3 && p.spans[0].length == 3,
+          "tag beside a date and time, at its source position");
+    for (auto text : {"C# 学习", "#1号楼 开会", "issue #12", "issue #12/5 处理", "#3点 会议", "交报告 #明天",
+                      "http://a.com/#工作", "开会 #工作组", "开会 ##工作", "F#项目", "#2026-11-05 发布", "＃明天 版本"}) {
+        auto r = parseEntry(text, day, groups);
+        check(r.error.isEmpty() && r.title == QString(text) && r.group.isEmpty() && r.spans.isEmpty(),
+              "unmatched hash text stays in the name");
+    }
+    check(parseEntry("开会 #工作", day).title == "开会 #工作", "no categories, no tags");
+    check(!parseEntry("开会 #工作 #项目", day, groups).error.isEmpty(), "two tags rejected");
+    check(!parseEntry("#工作", day, groups).error.isEmpty(), "tag without a name rejected");
     check(parseEntry("买菜", day).title == "买菜" && parseEntry("买菜", day).spans.isEmpty(),
           "plain title unchanged");
 }

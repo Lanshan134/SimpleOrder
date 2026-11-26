@@ -29,9 +29,8 @@ Calendar::Calendar(QWidget *parent) : QCalendarWidget(parent) {
     monthButton->setToolTip("选择月份");
     for (bool years : {true, false}) {
         auto owner = years ? yearButton : monthButton;
-        // No parent: a menu inside the floating window would take on its see-through stylesheet.
-        auto menu = new QMenu;
-        connect(this, &QObject::destroyed, menu, [menu] { delete menu; });
+        // Parented inside the window: scaleFloating keeps menus there opaque at any background opacity.
+        auto menu = new QMenu(owner);
         owner->setMenu(menu);
         // Each entry keeps the other part of the page: years keep the month, months keep the year.
         connect(menu, &QMenu::aboutToShow, this, [this, menu, years] {

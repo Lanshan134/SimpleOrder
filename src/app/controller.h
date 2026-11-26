@@ -49,9 +49,11 @@ class Controller : public QObject {
     QPlainTextEdit *notes = nullptr;
     QTabBar *editorTabs = nullptr;
     QJsonObject editorBaseline;
-    bool dateManuallyEdited = false;
+    bool dateManuallyEdited = false, groupManuallyEdited = false;
     bool parseEditorTitle();
     void smartEntrySmokeTest(const QString &);
+    void categoryTagSmokeTest(const QString &);
+    void dateLabelSmokeTest(const QString &);
     bool dateFieldActive = false, calendarDateEditPending = false;
     int dateFocusGeneration = 0;
     bool eventFilter(QObject *, QEvent *) override;
@@ -102,6 +104,7 @@ class Controller : public QObject {
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);
     void calendarEditorSmokeTest();
+    void interactionSmokeTest(const QString &directory);
     void applyPreferences();
     bool visibleItem(const Item &) const;
     QList<Item> sortedItems(QList<Item>) const;

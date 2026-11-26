@@ -21,7 +21,7 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
     applyPreferences();
     calendarView = settings.value("defaultView", "tasks").toString() == "calendar";
     stack->setCurrentIndex(calendarView ? 1 : 0);
-    switchButton->setText(calendarView ? "列表" : "日历");
+    setGlyph(switchButton, calendarView ? Glyph::List : Glyph::Calendar, calendarView ? "返回任务列表" : "切换到日历");
     floating->findChild<QLabel *>("windowTitle")->setText(calendarView ? "日历" : "任务");
     // Before restoring geometry: a remembered floating size already includes the expansion.
     if (settings.value("floatingCalendarExpanded", false).toBool()) {
@@ -64,18 +64,7 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
     floating->onClose = [this] { closeWindow(true); };
     manager->onClose = [this] { closeWindow(false); };
     if (!testing && QSystemTrayIcon::isSystemTrayAvailable()) {
-        QPixmap pix(32, 32);
-        pix.fill(Qt::transparent);
-        QPainter p(&pix);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setBrush(theme::color("accent"));
-        p.setPen(Qt::NoPen);
-        p.drawEllipse(1, 1, 30, 30);
-        p.setPen(QPen(Qt::white, 3.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        const QPointF tick[] = {{9, 16.5}, {14, 21.5}, {23, 11}};
-        p.drawPolyline(tick, 3);
-        p.end();
-        tray = new QSystemTrayIcon(QIcon(pix), this);
+        tray = new QSystemTrayIcon(qApp->windowIcon(), this);
         tray->setToolTip("简序");
         auto menu = new QMenu;
         menu->addAction("打开悬浮窗", [this] {
@@ -133,13 +122,10 @@ void Controller::guard(const std::function<void()> &fn) {
     }
 }
 void Controller::bindList(TaskList *list) {
-    list->edit = [this](qint64 id) { choose(id); };
-    list->contextEdit = [this, list](qint64 id) {
-        if (list == pins || list == tasks || list == plans || list == floatDay)
-            editFloatingItem(id);
-        else
-            choose(id);
-    };
+    // The floating lists open the independent editor and leave the manager where it is.
+    const bool floatingList = list == pins || list == tasks || list == plans || list == floatDay;
+    list->edit = [this, floatingList](qint64 id) { floatingList ? editFloatingItem(id) : choose(id); };
+    list->contextEdit = list->edit;
     list->complete = [this, list](qint64 id) {
         guard([&] { complete(id, list == dayItems || list == floatDay ? day : QDate::currentDate()); });
     };
@@ -147,7 +133,8 @@ void Controller::bindList(TaskList *list) {
         guard([&] {
             if (settingsPreview)
                 return;
-            if (!leaveEditor())
+            // Pinning another item leaves the draft alone.
+            if (id == selected && !leaveEditor())
                 return;
             for (auto i : store.all())
                 if (i.id == id) {
@@ -223,11 +210,12 @@ void Controller::updateLists() {
     dayItems->fill(sortedItems(dayRows));
     floatDay->fill(sortedItems(floatRows));
     fitDayList();
-    dateLabel->setText(QLocale().toString(day, day == QDate::currentDate() ? "今天 · M月d日 ddd" : "M月d日 ddd") +
+    const QString dayWord = relativeDay(day, QDate::currentDate());
+    dateLabel->setText((dayWord.isEmpty() ? QString() : dayWord + " · ") + QLocale().toString(day, "M月d日 ddd") +
                        QString(" · %1 项").arg(dayRows.size()));
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {
         for (int n = 0; n < list->count(); ++n)
-            if (list->item(n)->data(Qt::UserRole).toLongLong() == selected)
+            if (selected && list->item(n)->data(Qt::UserRole).toLongLong() == selected)
                 list->setCurrentRow(n);
         list->verticalScrollBar()->setValue(positions.value(list));
     }
@@ -267,7 +255,10 @@ void Controller::setDate(QDate d) {
         cal->repaintCells();
         floatCal->repaintCells();
     };
-    if (settingsPreview || (!itemWindow && !inspector->isVisibleTo(manager))) {
+    // Only an editor the user can see follows the calendar; the independent one only for its date field.
+    const bool editorFollows =
+        itemWindow ? editTaskDate : inspector->isVisible() && !manager->isMinimized();
+    if (settingsPreview || !editorFollows) {
         // A closed editor keeps its saved item or draft while the calendar browses.
         day = d;
         selectDay(d);
@@ -305,8 +296,7 @@ void Controller::setDate(QDate d) {
 void Controller::complete(qint64 id, QDate occurrence) {
     if (settingsPreview)
         return;
-    if (!leaveEditor())
-        return;
+    // Completing never touches the draft, not even its own item's: the hidden completion fields follow below.
     for (auto i : items)
         if (i.id == id) {
             if (i.type == "plan" && !i.rule.isEmpty()) {
@@ -322,6 +312,12 @@ void Controller::complete(qint64 id, QDate occurrence) {
             } else
                 i.done = !i.done;
             store.save(i);
+            if (id == selected && hasEditorChanges()) {
+                // Saving the draft later must not undo this completion.
+                QSignalBlocker a(done), b(progress);
+                done->setChecked(i.done);
+                progress->setValue(i.progress);
+            }
             refresh();
             return;
         }
@@ -329,19 +325,17 @@ void Controller::complete(qint64 id, QDate occurrence) {
 void Controller::schedule(qint64 id, QDate d) {
     if (settingsPreview)
         return;
-    if (!leaveEditor())
+    // Rescheduling another item leaves the draft alone.
+    if (id == selected && !leaveEditor())
         return;
     for (auto i : items)
         if (i.id == id) {
+            if (!reschedulable(i))
+                return;
             i.date = d.toString(Qt::ISODate);
-            if (i.type == "plan" && !i.rule.isEmpty()) {
-                auto k = i.rule.value("kind").toString();
-                if (k == "total")
-                    i.rule.insert("end", i.date);
-                else if (k == "interval")
+            if (i.type == "plan") {
+                if (i.rule.value("kind").toString() == "interval")
                     i.rule.insert("first", i.date);
-                else if (k == "quota")
-                    i.rule.insert("start", i.date);
                 else {
                     auto days = i.rule.value("days").toArray();
                     int value = i.rule.value("mode").toString() == "week" ? d.dayOfWeek() : d.day();
@@ -353,7 +347,9 @@ void Controller::schedule(qint64 id, QDate d) {
             }
             store.save(i);
             day = d;
-            selected = id;
+            // The independent editor, or a draft, keeps the item it shows.
+            if (!itemWindow && !hasEditorChanges())
+                selected = id;
             refresh();
             return;
         }
@@ -361,7 +357,7 @@ void Controller::schedule(qint64 id, QDate d) {
 bool Controller::add(const QString &t, QDate d) {
     if (settingsPreview)
         return false;
-    const auto parsed = parseEntry(t);
+    const auto parsed = parseEntry(t, QDate::currentDate(), currentCategories());
     if (!parsed.error.isEmpty())
         throw std::runtime_error(parsed.error.toUtf8().constData());
     if (!leaveEditor())
@@ -372,10 +368,12 @@ bool Controller::add(const QString &t, QDate d) {
         d = QDate::currentDate();
     Item i;
     i.title = parsed.title;
-    i.group = settings.value("defaultType", "other").toString();
+    i.group = parsed.group.isEmpty() ? settings.value("defaultType", "other").toString() : parsed.group;
     i.date = d.isValid() ? d.toString(Qt::ISODate) : QString();
     i.time = parsed.time.isValid() ? parsed.time.toString("HH:mm") : QString();
-    selected = store.save(i).id;
+    const qint64 id = store.save(i).id;
+    if (!itemWindow)
+        selected = id;
     dirty = false;
     if (d.isValid())
         day = d;

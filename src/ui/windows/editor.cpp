@@ -58,7 +58,7 @@ bool Controller::eventFilter(QObject *watched, QEvent *event) {
 }
 void Controller::fillEditor() {
     refreshing = true;
-    dateManuallyEdited = false;
+    dateManuallyEdited = groupManuallyEdited = false;
     title->setProperty("entryError", QString());
     dateFieldActive = false;
     calendarDateEditPending = false;
@@ -152,11 +152,20 @@ bool Controller::leaveEditor() {
     dirty = hasEditorChanges();
     if (!dirty)
         return true;
-    auto result = QMessageBox::question(editor->window(), "未保存修改", "是否保存当前事项的修改？",
-                                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
-                                        QMessageBox::Save);
-    if (result == QMessageBox::Cancel)
+    // Ask over the window the gesture came from; the floating sheet's faded colours stay off the box.
+    QMessageBox box(QMessageBox::Question, "未保存修改",
+                    settingsPreview ? "设置预览中不能保存。是否放弃当前事项的修改？" : "是否保存当前事项的修改？",
+                    (settingsPreview ? QMessageBox::NoButton : QMessageBox::Save) | QMessageBox::Discard |
+                        QMessageBox::Cancel,
+                    floating->isActiveWindow() ? floating : editor->window());
+    box.setStyleSheet(qApp->styleSheet());
+    box.setDefaultButton(settingsPreview ? QMessageBox::Cancel : QMessageBox::Save);
+    const auto result = QMessageBox::StandardButton(box.exec());
+    if (result == QMessageBox::Cancel) {
+        // The list highlight returns to the item still being edited.
+        updateLists();
         return false;
+    }
     if (result == QMessageBox::Discard) {
         fillEditor();
         return true;
@@ -170,9 +179,6 @@ void Controller::choose(qint64 id) {
         if (!leaveEditor())
             return;
         selected = id;
-        for (auto i : items)
-            if (i.id == id && !i.date.isEmpty())
-                day = QDate::fromString(i.date, Qt::ISODate);
         refresh();
     }
     if (itemWindow) {
@@ -261,7 +267,7 @@ void Controller::editFloatingItem(qint64 id) {
 bool Controller::parseEditorTitle() {
     if (settingsPreview || type->currentData().toString() != "task")
         return false;
-    const auto parsed = parseEntry(title->text());
+    const auto parsed = parseEntry(title->text(), QDate::currentDate(), currentCategories());
     QString error = parsed.error;
     if (error.isEmpty() && parsed.date.isValid() && !date->text().trimmed().isEmpty() &&
         date->text().trimmed() != parsed.date.toString(Qt::ISODate) && (selected || dateManuallyEdited))
@@ -269,6 +275,9 @@ bool Controller::parseEditorTitle() {
     if (error.isEmpty() && parsed.time.isValid() && !time->text().trimmed().isEmpty() &&
         time->text().trimmed() != parsed.time.toString("HH:mm"))
         error = "时间框已有值，请先清空时间框或移除名称中的时间";
+    if (error.isEmpty() && !parsed.group.isEmpty() && parsed.group != group->currentData().toString() &&
+        (selected || groupManuallyEdited))
+        error = "类型已选定，请在类型框改选或移除名称中的 #类型";
     title->setProperty("entryError", error);
     if (!error.isEmpty()) {
         QToolTip::showText(title->mapToGlobal(QPoint(0, title->height())), error, title);
@@ -278,6 +287,8 @@ bool Controller::parseEditorTitle() {
     if (parsed.spans.isEmpty())
         return false;
     title->setText(parsed.title);
+    if (!parsed.group.isEmpty())
+        group->setCurrentIndex(group->findData(parsed.group));
     if (parsed.date.isValid())
         date->setText(parsed.date.toString(Qt::ISODate));
     if (parsed.time.isValid()) {

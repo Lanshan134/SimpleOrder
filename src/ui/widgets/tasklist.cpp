@@ -78,7 +78,8 @@ class RowDelegate : public QStyledItemDelegate {
         p->setFont(small);
         int dw = qMin(130, QFontMetrics(small).horizontalAdvance(detail));
         const int urgency = done ? 0 : idx.data(Qt::UserRole + 6).toInt();
-        p->setPen(foregroundColor(opt.widget, theme::color(urgency == 2   ? "danger"
+        p->setPen(foregroundColor(opt.widget, theme::color(urgency == 3   ? "tomorrow"
+                                                           : urgency == 2 ? "danger"
                                                            : urgency == 1 ? "accent-ink"
                                                                           : "ink-muted")));
         p->drawText(QRect(right - dw - 20, r.top(), dw, r.height()), Qt::AlignVCenter | Qt::AlignRight, detail);
@@ -99,20 +100,21 @@ class RowDelegate : public QStyledItemDelegate {
         p->restore();
     }
 };
-// Relative words for the days people scan for; urgency colours today (1) and overdue items (2).
-QString dateMarker(const QString &iso, int *urgency) {
-    const QDate date = QDate::fromString(iso, Qt::ISODate), today = QDate::currentDate();
-    *urgency = !date.isValid() ? 0 : date < today ? 2 : date == today ? 1 : 0;
-    if (!date.isValid())
-        return iso.mid(5);
-    if (date == today)
-        return "今天";
-    if (date == today.addDays(1))
-        return "明天";
-    if (date == today.addDays(-1))
-        return "昨天";
-    return date.year() == today.year() ? iso.mid(5) : iso;
 }
+
+QString relativeDay(const QDate &date, const QDate &today) {
+    return date == today               ? QString("今天")
+           : date == today.addDays(1)  ? QString("明天")
+           : date == today.addDays(-1) ? QString("昨天")
+                                       : QString();
+}
+QString dateMarker(const QString &iso, const QDate &today, int *urgency) {
+    const QDate date = QDate::fromString(iso, Qt::ISODate);
+    *urgency = !date.isValid() ? 0 : date < today ? 2 : date == today ? 1 : date == today.addDays(1) ? 3 : 0;
+    const QString word = relativeDay(date, today);
+    if (!word.isEmpty())
+        return word;
+    return date.isValid() && date.year() != today.year() ? iso : iso.mid(5);
 }
 
 TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
@@ -133,11 +135,12 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
         if (pressedButton != Qt::LeftButton)
             return;
         auto id = i->data(Qt::UserRole).toLongLong();
-        if (!id)
+        if (!id || pressedCheck != releasedCheck)
             return;
-        const QPoint p = viewport()->mapFromGlobal(QCursor::pos());
-        if (p.x() < scaled(this, 30) && !property("previewOnly").toBool()) {
-            if (complete)
+        if (pressedCheck) {
+            // A mouse completion leaves no keyboard position behind, as before.
+            setCurrentRow(-1);
+            if (complete && !property("previewOnly").toBool())
                 complete(id);
         } else if (edit)
             edit(id);
@@ -147,10 +150,17 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
             edit(i->data(Qt::UserRole).toLongLong());
     });
 }
+bool TaskList::inCheck(const QPoint &p) const {
+    return p.x() < scaled(this, 30);
+}
 void TaskList::fill(const QList<Item> &items, bool headings) {
     QSignalBlocker block(this);
+    // Refilling keeps the keyboard position: the same item, or the nearest item row if it has gone.
+    const qint64 currentId = currentItem() ? currentItem()->data(Qt::UserRole).toLongLong() : 0;
+    const int currentIndex = currentRow();
     clear();
     int last = -1;
+    const QDate today = QDate::currentDate();
     const auto sectionOf = [](const Item &i) { return i.done ? 3 : i.pinned ? 0 : i.type == "task" ? 1 : 2; };
     QHash<int, int> sectionCounts;
     if (headings)
@@ -172,6 +182,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         row->setData(Qt::UserRole + 2, i.type == "plan");
         row->setData(Qt::UserRole + 3, i.done);
         row->setData(Qt::UserRole + 5, i.pinned);
+        row->setData(Qt::UserRole + 7, reschedulable(i));
         bool dates = !property("showDates").isValid() || property("showDates").toBool();
         bool times = !property("showTimes").isValid() || property("showTimes").toBool();
         bool counts = !property("showProgress").isValid() || property("showProgress").toBool();
@@ -183,7 +194,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         } else {
             // A list for one chosen day already says which day it is.
             if (dates && !i.date.isEmpty() && !property("dayList").toBool())
-                marker = dateMarker(i.date, &urgency);
+                marker = dateMarker(i.date, today, &urgency);
             if (times && !i.time.isEmpty())
                 marker += (marker.isEmpty() ? QString() : " ") + i.time;
         }
@@ -205,7 +216,18 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         row->setToolTip(i.title + "\n" + groupName(i.group) + " · " + (i.date.isEmpty() ? "未安排" : i.date) +
                         (i.time.isEmpty() ? QString() : " " + i.time) + "\n" +
                         (i.type == "plan" ? "点击圆圈记录进度；达标后完成" : "点击圆圈切换完成") +
-                        "\n拖到日历可改期");
+                        (reschedulable(i) ? "\n拖到日历可改期" : ""));
+    }
+    if (currentIndex >= 0) {
+        int restore = -1;
+        for (int n = 0; n < count() && restore < 0; ++n)
+            if (currentId && item(n)->data(Qt::UserRole).toLongLong() == currentId)
+                restore = n;
+        for (int n = qMin(currentIndex, count() - 1); n >= 0 && restore < 0; --n)
+            if (item(n)->data(Qt::UserRole).toLongLong())
+                restore = n;
+        if (restore >= 0)
+            setCurrentRow(restore, QItemSelectionModel::NoUpdate);
     }
     viewport()->update();
 }
@@ -267,7 +289,8 @@ void TaskList::wheelEvent(QWheelEvent *event) {
 }
 void TaskList::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Space && currentItem() && currentItem()->data(Qt::UserRole).toLongLong()) {
-        if (complete && !property("previewOnly").toBool())
+        // Holding Space toggles once, not on every repeat.
+        if (complete && !property("previewOnly").toBool() && !event->isAutoRepeat())
             complete(currentItem()->data(Qt::UserRole).toLongLong());
         event->accept();
         return;

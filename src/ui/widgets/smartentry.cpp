@@ -1,4 +1,6 @@
 #include "ui/widgets/smartentry.h"
+#include "ui/theme/appearance.h"
+#include "ui/widgets/categorypopup.h"
 #include <QtWidgets>
 
 SmartEntry::SmartEntry(QWidget *parent) : QPlainTextEdit(parent) {
@@ -9,10 +11,29 @@ SmartEntry::SmartEntry(QWidget *parent) : QPlainTextEdit(parent) {
     setTabChangesFocus(true);
     setFixedHeight(36);
     document()->setDocumentMargin(0);
-    connect(this, &QPlainTextEdit::textChanged, this, [this] { updatePreview(); });
+    categoryPopup = new CategoryPopup(
+        this, [this] { return toPlainText().left(textCursor().position()); },
+        [this](int start, const Category &category) {
+            auto cursor = textCursor();
+            const int end = cursor.position();
+            const QString tag = "#" + category.name + " ";
+            if (toPlainText().size() - (end - start) + tag.size() > 1000)
+                return;
+            cursor.setPosition(start);
+            cursor.setPosition(end, QTextCursor::KeepAnchor);
+            cursor.insertText(tag);
+        });
+    connect(this, &QPlainTextEdit::textChanged, this, [this] {
+        updatePreview();
+        categoryPopup->refresh();
+    });
+    connect(this, &QPlainTextEdit::cursorPositionChanged, this, [this] {
+        if (categoryPopup->isOpen())
+            categoryPopup->refresh();
+    });
 }
 void SmartEntry::updatePreview() {
-    const auto parsed = parseEntry(toPlainText());
+    const auto parsed = parseEntry(toPlainText(), QDate::currentDate(), currentCategories());
     QList<QTextEdit::ExtraSelection> marks;
     for (auto span : parsed.spans) {
         QTextEdit::ExtraSelection mark;
@@ -32,6 +53,8 @@ void SmartEntry::updatePreview() {
     auto tip = parsed.error;
     if (tip.isEmpty() && !parsed.spans.isEmpty()) {
         QStringList fields;
+        if (!parsed.group.isEmpty())
+            fields << groupName(parsed.group);
         if (parsed.date.isValid())
             fields << parsed.date.toString(Qt::ISODate);
         if (parsed.time.isValid())
@@ -45,7 +68,7 @@ void SmartEntry::submitEntry() {
     auto value = toPlainText();
     if (value.trimmed().isEmpty())
         return;
-    auto parsed = parseEntry(value);
+    auto parsed = parseEntry(value, QDate::currentDate(), currentCategories());
     if (!parsed.error.isEmpty()) {
         QToolTip::showText(mapToGlobal(QPoint(0, height())), parsed.error, this);
         return;
@@ -58,6 +81,11 @@ void SmartEntry::changeEvent(QEvent *event) {
     QPlainTextEdit::changeEvent(event);
     if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange)
         updatePreview();
+}
+// Text left here since yesterday still means a day relative to now.
+void SmartEntry::focusInEvent(QFocusEvent *event) {
+    QPlainTextEdit::focusInEvent(event);
+    updatePreview();
 }
 void SmartEntry::inputMethodEvent(QInputMethodEvent *event) {
     composing = !event->preeditString().isEmpty();

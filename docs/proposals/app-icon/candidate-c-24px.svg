@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <title>SimpleOrder C 24px</title>
+  <rect x="0.5" y="0.5" width="23.0" height="23.0" rx="5.5" fill="#2563eb"/>
+  <rect x="4" y="4" width="9" height="2" rx="1.0" fill="#bdd2fd"/>
+  <rect x="4" y="8" width="3" height="2" rx="1.0" fill="#bdd2fd"/>
+  <rect x="9" y="9" width="12" height="12" rx="3" fill="#ffffff"/>
+  <polyline points="11.9,15.1 14.1,17.3 18.2,12.6" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
