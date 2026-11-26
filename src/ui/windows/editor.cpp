@@ -152,11 +152,20 @@ bool Controller::leaveEditor() {
     dirty = hasEditorChanges();
     if (!dirty)
         return true;
-    auto result = QMessageBox::question(editor->window(), "未保存修改", "是否保存当前事项的修改？",
-                                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
-                                        QMessageBox::Save);
-    if (result == QMessageBox::Cancel)
+    // Ask over the window the gesture came from; the floating sheet's faded colours stay off the box.
+    QMessageBox box(QMessageBox::Question, "未保存修改",
+                    settingsPreview ? "设置预览中不能保存。是否放弃当前事项的修改？" : "是否保存当前事项的修改？",
+                    (settingsPreview ? QMessageBox::NoButton : QMessageBox::Save) | QMessageBox::Discard |
+                        QMessageBox::Cancel,
+                    floating->isActiveWindow() ? floating : editor->window());
+    box.setStyleSheet(qApp->styleSheet());
+    box.setDefaultButton(settingsPreview ? QMessageBox::Cancel : QMessageBox::Save);
+    const auto result = QMessageBox::StandardButton(box.exec());
+    if (result == QMessageBox::Cancel) {
+        // The list highlight returns to the item still being edited.
+        updateLists();
         return false;
+    }
     if (result == QMessageBox::Discard) {
         fillEditor();
         return true;
@@ -170,9 +179,6 @@ void Controller::choose(qint64 id) {
         if (!leaveEditor())
             return;
         selected = id;
-        for (auto i : items)
-            if (i.id == id && !i.date.isEmpty())
-                day = QDate::fromString(i.date, Qt::ISODate);
         refresh();
     }
     if (itemWindow) {

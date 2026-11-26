@@ -149,3 +149,7 @@ void validatePlan(const Item &i) {
             invalid("计划完成记录无效");
     }
 }
+bool reschedulable(const Item &item) {
+    const auto kind = item.rule.value("kind").toString();
+    return item.type != "plan" || kind == "interval" || kind == "dates";
+}

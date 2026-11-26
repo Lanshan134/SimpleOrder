@@ -5,6 +5,8 @@
 
 // Floating text opacity floor (percent); also clamps older settings files.
 inline constexpr int MIN_TEXT_OPACITY = 40;
+// Below this floating background opacity the optional text halo switches on.
+inline constexpr qreal HALO_BELOW = 0.85;
 // Floating window sizes at 100% text; Windows text size enlarges them so scaled text still fits.
 inline QSize floatingSize(int width, int height) {
     return QSize(qRound(width * theme::textScale), qRound(height * theme::textScale));
@@ -15,6 +17,11 @@ inline constexpr int ROW_HEIGHT = 30;
 qreal widgetScale(const QWidget *widget);
 QColor surfaceColor(const QWidget *widget, QColor color, const char *key);
 QColor foregroundColor(const QWidget *widget, QColor color);
+// Light-text counterpart of a palette colour when the floating window uses light text.
+QColor floatingTone(const QWidget *widget, QColor color, const char *key);
+class QGraphicsEffect;
+// Outlines everything drawn in an area so it stays legible over any desktop.
+QGraphicsEffect *haloEffect(const QWidget *window);
 int scaled(const QWidget *widget, int value);
 // The categories in their settings order, as last loaded.
 const QList<Category> &currentCategories();

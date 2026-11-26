@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <title>简序 · SimpleOrder 24px</title>
+  <rect x="0.5" y="0.5" width="23.0" height="23.0" rx="5.5" fill="#2563eb"/>
+  <path d="M9 6.5 A2.75 2.75 0 0 0 9 12 M15 12 A2.75 2.75 0 0 1 15 17.5" fill="none" stroke="#bdd2fd" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9 6.5 H17 M9 12 H15 M7 17.5 H15" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

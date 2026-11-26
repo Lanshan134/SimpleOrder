@@ -293,13 +293,14 @@ bool Controller::smokeTest(const QString &dir) {
     auto table = cal->findChild<QAbstractItemView *>();
     auto idx = table->model()->index(2, 3);
     QPoint pt = table->viewport()->mapTo(cal, table->visualRect(idx).center());
+    // A task: count plans such as the one above have no single date to move.
     QMimeData mime;
-    mime.setData("application/x-lighttask-id", QByteArray::number(id));
+    mime.setData("application/x-lighttask-id", QByteArray::number(detailId));
     QDragEnterEvent enter(pt, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(cal, &enter);
     QDropEvent drop(QPointF(pt), Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(cal, &drop);
-    require(drop.isAccepted() && QDate::fromString(get(id).date, Qt::ISODate).day() == idx.data().toInt(),
+    require(drop.isAccepted() && QDate::fromString(get(detailId).date, Qt::ISODate).day() == idx.data().toInt(),
             "drop target date");
     store.saveCategory({"backup_type", "备份类型", "#f08080"});
     reloadCategories();
@@ -477,6 +478,7 @@ bool Controller::smokeTest(const QString &dir) {
     smartEntrySmokeTest(dir);
     categoryTagSmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
+    interactionSmokeTest(dir);
     floatingSmokeTest(dir);
     scrollbarSmokeTest(dir);
     editorLayoutSmokeTest(dir);
@@ -807,6 +809,8 @@ void Controller::draftSmokeTest(const QString &dir) {
     choose(otherId);
     require(selected == otherId, "unchanged form switches without prompt");
     settings.setValue("frameless", true);
+    // These checks measure the faded colours themselves, without the legibility halo.
+    settings.setValue("floatingHalo", false);
     settings.setValue("opacity", 20);
     settings.setValue("textOpacity", 100);
     applyFloatingAppearance();
@@ -850,7 +854,7 @@ void Controller::draftSmokeTest(const QString &dir) {
             strongest = qMax(strongest, faded.pixelColor(x, y).alpha());
     // 45% text over a 20% background composites to about 143, or up to about 170 with text smoothing;
     // an unfaded placeholder reads 255.
-    require(strongest <= 190, "rendered placeholder follows text opacity");
+    require(strongest >= 120 && strongest <= 190, "rendered placeholder shows and follows text opacity");
     calendarView = true;
     stack->setCurrentIndex(1);
     settings.setValue("opacity", 100);
@@ -899,6 +903,7 @@ void Controller::draftSmokeTest(const QString &dir) {
     settingsWindow->reject();
     settings.setValue("opacity", 100);
     settings.setValue("textOpacity", 100);
+    settings.remove("floatingHalo");
     applyFloatingAppearance();
     dirty = false;
 }

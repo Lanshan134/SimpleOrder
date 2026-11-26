@@ -135,11 +135,12 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
         if (pressedButton != Qt::LeftButton)
             return;
         auto id = i->data(Qt::UserRole).toLongLong();
-        if (!id)
+        if (!id || pressedCheck != releasedCheck)
             return;
-        const QPoint p = viewport()->mapFromGlobal(QCursor::pos());
-        if (p.x() < scaled(this, 30) && !property("previewOnly").toBool()) {
-            if (complete)
+        if (pressedCheck) {
+            // A mouse completion leaves no keyboard position behind, as before.
+            setCurrentRow(-1);
+            if (complete && !property("previewOnly").toBool())
                 complete(id);
         } else if (edit)
             edit(id);
@@ -149,8 +150,14 @@ TaskList::TaskList(QWidget *parent) : QListWidget(parent) {
             edit(i->data(Qt::UserRole).toLongLong());
     });
 }
+bool TaskList::inCheck(const QPoint &p) const {
+    return p.x() < scaled(this, 30);
+}
 void TaskList::fill(const QList<Item> &items, bool headings) {
     QSignalBlocker block(this);
+    // Refilling keeps the keyboard position: the same item, or the nearest item row if it has gone.
+    const qint64 currentId = currentItem() ? currentItem()->data(Qt::UserRole).toLongLong() : 0;
+    const int currentIndex = currentRow();
     clear();
     int last = -1;
     const QDate today = QDate::currentDate();
@@ -175,6 +182,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         row->setData(Qt::UserRole + 2, i.type == "plan");
         row->setData(Qt::UserRole + 3, i.done);
         row->setData(Qt::UserRole + 5, i.pinned);
+        row->setData(Qt::UserRole + 7, reschedulable(i));
         bool dates = !property("showDates").isValid() || property("showDates").toBool();
         bool times = !property("showTimes").isValid() || property("showTimes").toBool();
         bool counts = !property("showProgress").isValid() || property("showProgress").toBool();
@@ -208,7 +216,18 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         row->setToolTip(i.title + "\n" + groupName(i.group) + " · " + (i.date.isEmpty() ? "未安排" : i.date) +
                         (i.time.isEmpty() ? QString() : " " + i.time) + "\n" +
                         (i.type == "plan" ? "点击圆圈记录进度；达标后完成" : "点击圆圈切换完成") +
-                        "\n拖到日历可改期");
+                        (reschedulable(i) ? "\n拖到日历可改期" : ""));
+    }
+    if (currentIndex >= 0) {
+        int restore = -1;
+        for (int n = 0; n < count() && restore < 0; ++n)
+            if (currentId && item(n)->data(Qt::UserRole).toLongLong() == currentId)
+                restore = n;
+        for (int n = qMin(currentIndex, count() - 1); n >= 0 && restore < 0; --n)
+            if (item(n)->data(Qt::UserRole).toLongLong())
+                restore = n;
+        if (restore >= 0)
+            setCurrentRow(restore, QItemSelectionModel::NoUpdate);
     }
     viewport()->update();
 }
@@ -270,7 +289,8 @@ void TaskList::wheelEvent(QWheelEvent *event) {
 }
 void TaskList::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Space && currentItem() && currentItem()->data(Qt::UserRole).toLongLong()) {
-        if (complete && !property("previewOnly").toBool())
+        // Holding Space toggles once, not on every repeat.
+        if (complete && !property("previewOnly").toBool() && !event->isAutoRepeat())
             complete(currentItem()->data(Qt::UserRole).toLongLong());
         event->accept();
         return;

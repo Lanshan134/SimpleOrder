@@ -26,6 +26,7 @@ SOURCES += \
     src/ui/windows/window.cpp \
     tests/entryparser_tests.cpp \
     tests/floating_smoke.cpp \
+    tests/interaction_smoke.cpp \
     tests/settings_smoke.cpp \
     tests/ui_smoke.cpp
 
@@ -47,6 +48,8 @@ HEADERS += \
     src/ui/windows/window.h
 
 RESOURCES += resources/theme.qrc
+# The executable's icon for Explorer, shortcuts and the taskbar; tools/make_icon.py regenerates it.
+RC_ICONS = resources/app-icon.ico
 
 # Debug our application against the installed release Qt libraries.
 win32-g++:contains(CONFIG, app_debug) {

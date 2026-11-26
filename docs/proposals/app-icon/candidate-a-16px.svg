@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <title>SimpleOrder A 16px</title>
+  <rect x="0" y="0" width="16" height="16" rx="3.5" fill="#2563eb"/>
+  <polyline points="2.5,4 3.5,5 5.5,3" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="8" y="3" width="6" height="2" rx="0.5" fill="#ffffff"/>
+  <rect x="3" y="7" width="2" height="2" rx="0.6" fill="#bdd2fd"/>
+  <rect x="8" y="7" width="6" height="2" rx="0.5" fill="#bdd2fd"/>
+  <rect x="3" y="11" width="2" height="2" rx="0.6" fill="#bdd2fd"/>
+  <rect x="8" y="11" width="4" height="2" rx="0.5" fill="#bdd2fd"/>
+</svg>

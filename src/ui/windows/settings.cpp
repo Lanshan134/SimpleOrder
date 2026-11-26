@@ -125,7 +125,8 @@ QPushButton *action(const QString &text) {
 QStringList keysForPage(int page) {
     if (page == 0)
         return {"alwaysOnTop", "frameless", "opacity",  "textOpacity", "fontSize",        "scaleWithWindow",
-                "taskRows",    "pinRows",   "planRows", "defaultView", "rememberGeometry"};
+                "taskRows",    "pinRows",   "planRows", "defaultView", "rememberGeometry",
+                "floatingText", "floatingHalo"};
     if (page == 2)
         return {"showCompleted", "retentionHours", "sortMode",    "undatedLast",
                 "showDates",     "showTimes",      "showProgress"};
@@ -351,6 +352,8 @@ void SettingsDialog::floatingPage() {
     opacityControl("opacity", "窗口背景不透明度", 0);
     // Below this the floating text, including the way back into settings, stops being legible.
     opacityControl("textOpacity", "文字不透明度", MIN_TEXT_OPACITY);
+    choices(appearance, "文字颜色", "floatingText", {{"深色", "dark"}, {"浅色", "light"}}, "dark");
+    toggle(appearance, "背景透明时文字描边", "floatingHalo", true);
     auto layout = section(p, "文字与布局");
     number(layout, "基础字号", "fontSize", 12, 22, 15, " px");
     toggle(layout, "随窗口大小缩放", "scaleWithWindow", true);
