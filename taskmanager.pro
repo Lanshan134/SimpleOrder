@@ -14,6 +14,7 @@ SOURCES += \
     src/storage/store.cpp \
     src/ui/theme/appearance.cpp \
     src/ui/widgets/calendar.cpp \
+    src/ui/widgets/categorypopup.cpp \
     src/ui/widgets/planeditor.cpp \
     src/ui/widgets/smartentry.cpp \
     src/ui/widgets/tasklist.cpp \
@@ -36,6 +37,7 @@ HEADERS += \
     src/ui/theme/appearance.h \
     src/ui/theme/theme.h \
     src/ui/widgets/calendar.h \
+    src/ui/widgets/categorypopup.h \
     src/ui/widgets/editorwidgets.h \
     src/ui/widgets/planeditor.h \
     src/ui/widgets/smartentry.h \

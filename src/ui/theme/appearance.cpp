@@ -1,20 +1,27 @@
 #include "ui/theme/appearance.h"
 
 namespace {
-QHash<QString, Category> categoryCache;
+QList<Category> categoryCache;
+Category cachedCategory(const QString &id) {
+    for (const auto &category : categoryCache)
+        if (category.id == id)
+            return category;
+    return {id, id, "#aaaeb8"};
+}
 }
 
 QColor groupColor(const QString &g) {
-    return QColor(categoryCache.value(g, {g, g, "#aaaeb8"}).color);
+    return QColor(cachedCategory(g).color);
 }
 QString groupName(const QString &g) {
-    return categoryCache.value(g, {g, g, "#aaaeb8"}).name;
+    return cachedCategory(g).name;
 }
 
+const QList<Category> &currentCategories() {
+    return categoryCache;
+}
 void updateCategoryColors(const QList<Category> &categories) {
-    categoryCache.clear();
-    for (const auto &category : categories)
-        categoryCache.insert(category.id, category);
+    categoryCache = categories;
 }
 
 qreal widgetScale(const QWidget *widget) {

@@ -217,7 +217,8 @@ void Controller::updateLists() {
     dayItems->fill(sortedItems(dayRows));
     floatDay->fill(sortedItems(floatRows));
     fitDayList();
-    dateLabel->setText(QLocale().toString(day, day == QDate::currentDate() ? "今天 · M月d日 ddd" : "M月d日 ddd") +
+    const QString dayWord = relativeDay(day, QDate::currentDate());
+    dateLabel->setText((dayWord.isEmpty() ? QString() : dayWord + " · ") + QLocale().toString(day, "M月d日 ddd") +
                        QString(" · %1 项").arg(dayRows.size()));
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {
         for (int n = 0; n < list->count(); ++n)
@@ -355,7 +356,7 @@ void Controller::schedule(qint64 id, QDate d) {
 bool Controller::add(const QString &t, QDate d) {
     if (settingsPreview)
         return false;
-    const auto parsed = parseEntry(t);
+    const auto parsed = parseEntry(t, QDate::currentDate(), currentCategories());
     if (!parsed.error.isEmpty())
         throw std::runtime_error(parsed.error.toUtf8().constData());
     if (!leaveEditor())
@@ -366,7 +367,7 @@ bool Controller::add(const QString &t, QDate d) {
         d = QDate::currentDate();
     Item i;
     i.title = parsed.title;
-    i.group = settings.value("defaultType", "other").toString();
+    i.group = parsed.group.isEmpty() ? settings.value("defaultType", "other").toString() : parsed.group;
     i.date = d.isValid() ? d.toString(Qt::ISODate) : QString();
     i.time = parsed.time.isValid() ? parsed.time.toString("HH:mm") : QString();
     selected = store.save(i).id;

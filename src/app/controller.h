@@ -46,9 +46,11 @@ class Controller : public QObject {
     QPlainTextEdit *notes = nullptr;
     QTabBar *editorTabs = nullptr;
     QJsonObject editorBaseline;
-    bool dateManuallyEdited = false;
+    bool dateManuallyEdited = false, groupManuallyEdited = false;
     bool parseEditorTitle();
     void smartEntrySmokeTest(const QString &);
+    void categoryTagSmokeTest(const QString &);
+    void dateLabelSmokeTest(const QString &);
     bool dateFieldActive = false, calendarDateEditPending = false;
     int dateFocusGeneration = 0;
     bool eventFilter(QObject *, QEvent *) override;
