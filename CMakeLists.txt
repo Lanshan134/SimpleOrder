@@ -38,6 +38,11 @@ add_custom_command(TARGET SimpleOrder POST_BUILD
     VERBATIM
 )
 target_link_libraries(SimpleOrder PRIVATE Qt5::Widgets Qt5::Sql)
+if(WIN32)
+ # The executable's icon; qmake writes the same resource from RC_ICONS.
+ target_sources(SimpleOrder PRIVATE resources/app.rc)
+ target_link_libraries(SimpleOrder PRIVATE shell32)
+endif()
 if(MSVC)
  target_compile_options(SimpleOrder PRIVATE /utf-8)
 endif()

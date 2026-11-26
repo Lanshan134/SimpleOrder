@@ -2,6 +2,10 @@
 #include "ui/widgets/smartentry.h"
 #include "ui/widgets/widgettools.h"
 #include "ui/windows/settings.h"
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 namespace {
 // Counts drag starts without running a real drag loop.
@@ -382,4 +386,14 @@ void Controller::interactionSmokeTest(const QString &dir) {
     require(halo->isChecked() && tone->currentData() == "dark" && !haloOn(), "page reset restores the defaults");
     settingsWindow->reject();
     QApplication::processEvents();
+
+    // #17: the application icon reaches every window, the tray's source and the executable itself.
+    const auto sizes = qApp->windowIcon().availableSizes();
+    require(sizes.contains(QSize(16, 16)) && sizes.contains(QSize(24, 24)) && sizes.contains(QSize(256, 256)) &&
+                floating->windowIcon().pixmap(16, 16).toImage().pixelColor(8, 1).rgb() == QColor("#2563eb").rgb(),
+            "application icon set on the windows");
+#ifdef Q_OS_WIN
+    const auto exe = QDir::toNativeSeparators(QCoreApplication::applicationFilePath()).toStdWString();
+    require(ExtractIconExW(exe.c_str(), -1, nullptr, nullptr, 0) >= 1, "the executable carries the icon");
+#endif
 }

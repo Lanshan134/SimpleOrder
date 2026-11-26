@@ -58,18 +58,7 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
     floating->onClose = [this] { closeWindow(true); };
     manager->onClose = [this] { closeWindow(false); };
     if (!testing && QSystemTrayIcon::isSystemTrayAvailable()) {
-        QPixmap pix(32, 32);
-        pix.fill(Qt::transparent);
-        QPainter p(&pix);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setBrush(theme::color("accent"));
-        p.setPen(Qt::NoPen);
-        p.drawEllipse(1, 1, 30, 30);
-        p.setPen(QPen(Qt::white, 3.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        const QPointF tick[] = {{9, 16.5}, {14, 21.5}, {23, 11}};
-        p.drawPolyline(tick, 3);
-        p.end();
-        tray = new QSystemTrayIcon(QIcon(pix), this);
+        tray = new QSystemTrayIcon(qApp->windowIcon(), this);
         tray->setToolTip("简序");
         auto menu = new QMenu;
         menu->addAction("打开悬浮窗", [this] {

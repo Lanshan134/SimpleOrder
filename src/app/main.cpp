@@ -62,6 +62,11 @@ int main(int argc, char **argv) {
     app.setApplicationName("SimpleOrder");
     app.setApplicationDisplayName("简序 · SimpleOrder");
     app.setApplicationVersion("2.0.0");
+    // Every window and the tray use the application icon; 16 and 24 are drawn to their own pixel grid.
+    QIcon icon;
+    for (int size : {16, 24, 32, 48, 64, 256})
+        icon.addFile(QString(":/theme/app-icon-%1.png").arg(size), QSize(size, size));
+    app.setWindowIcon(icon);
     QCommandLineParser options;
     options.addOption({"self-test", "Run the isolated regression checks."});
     options.addOption({"data-dir", "Use a separate database and settings directory.", "directory"});

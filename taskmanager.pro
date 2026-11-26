@@ -45,6 +45,8 @@ HEADERS += \
     src/ui/windows/window.h
 
 RESOURCES += resources/theme.qrc
+# The executable's icon for Explorer, shortcuts and the taskbar; tools/make_icon.py regenerates it.
+RC_ICONS = resources/app-icon.ico
 
 # Debug our application against the installed release Qt libraries.
 win32-g++:contains(CONFIG, app_debug) {
