@@ -184,6 +184,8 @@ QWidget *quickBar(const QString &placeholder, const std::function<bool(QString)>
     h->setSpacing(6);
     auto input = new SmartEntry;
     input->setPlaceholderText(placeholder);
+    // Qt 5.15 shows a plain text edit's placeholder only after a text change.
+    input->clear();
     input->onSubmit(add);
     input->setAccessibleName(placeholder);
     auto b = new GlyphButton(Glyph::Plus, "添加事项", "quickAdd");

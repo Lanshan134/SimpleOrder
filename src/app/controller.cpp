@@ -220,7 +220,7 @@ void Controller::updateLists() {
                        QString(" · %1 项").arg(dayRows.size()));
     for (auto list : {all, pins, tasks, plans, dayItems, floatDay}) {
         for (int n = 0; n < list->count(); ++n)
-            if (list->item(n)->data(Qt::UserRole).toLongLong() == selected)
+            if (selected && list->item(n)->data(Qt::UserRole).toLongLong() == selected)
                 list->setCurrentRow(n);
         list->verticalScrollBar()->setValue(positions.value(list));
     }
@@ -260,7 +260,10 @@ void Controller::setDate(QDate d) {
         cal->repaintCells();
         floatCal->repaintCells();
     };
-    if (settingsPreview || (!itemWindow && !inspector->isVisibleTo(manager))) {
+    // Only an editor the user can see follows the calendar; the independent one only for its date field.
+    const bool editorFollows =
+        itemWindow ? editTaskDate : inspector->isVisible() && !manager->isMinimized();
+    if (settingsPreview || !editorFollows) {
         // A closed editor keeps its saved item or draft while the calendar browses.
         day = d;
         selectDay(d);
@@ -346,7 +349,9 @@ void Controller::schedule(qint64 id, QDate d) {
             }
             store.save(i);
             day = d;
-            selected = id;
+            // The independent editor keeps the item it shows.
+            if (!itemWindow)
+                selected = id;
             refresh();
             return;
         }
@@ -368,7 +373,9 @@ bool Controller::add(const QString &t, QDate d) {
     i.group = settings.value("defaultType", "other").toString();
     i.date = d.isValid() ? d.toString(Qt::ISODate) : QString();
     i.time = parsed.time.isValid() ? parsed.time.toString("HH:mm") : QString();
-    selected = store.save(i).id;
+    const qint64 id = store.save(i).id;
+    if (!itemWindow)
+        selected = id;
     dirty = false;
     if (d.isValid())
         day = d;

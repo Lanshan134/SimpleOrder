@@ -9,7 +9,8 @@ void Window::setDragHandle(QWidget *handle) {
     handle->setCursor(Qt::SizeAllCursor);
 }
 bool Window::eventFilter(QObject *watched, QEvent *event) {
-    if (event->type() == QEvent::MouseButtonPress) {
+    // A press soon after a click arrives as a double click; it still starts a drag.
+    if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick) {
         auto mouse = static_cast<QMouseEvent *>(event);
         if (mouse->button() == Qt::LeftButton) {
             dragging = true;
@@ -50,7 +51,7 @@ void Window::resizeEvent(QResizeEvent *event) {
     if (onResize)
         onResize();
     if (auto grip = findChild<QSizeGrip *>()) {
+        // Left below the content, so the corner of the add button stays clickable.
         grip->move(width() - scaled(this, 17), height() - scaled(this, 17));
-        grip->raise();
     }
 }

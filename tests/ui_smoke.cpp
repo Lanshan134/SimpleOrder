@@ -475,6 +475,7 @@ bool Controller::smokeTest(const QString &dir) {
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
+    interactionSmokeTest();
 
     return true;
 }
@@ -845,7 +846,7 @@ void Controller::draftSmokeTest(const QString &dir) {
             strongest = qMax(strongest, faded.pixelColor(x, y).alpha());
     // 45% text over a 20% background composites to about 143, or up to about 170 with text smoothing;
     // an unfaded placeholder reads 255.
-    require(strongest <= 190, "rendered placeholder follows text opacity");
+    require(strongest >= 120 && strongest <= 190, "rendered placeholder shows and follows text opacity");
     calendarView = true;
     stack->setCurrentIndex(1);
     settings.setValue("opacity", 100);

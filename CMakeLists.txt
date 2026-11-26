@@ -25,6 +25,7 @@ add_executable(SimpleOrder WIN32
     src/ui/windows/settings.cpp
     src/ui/windows/window.cpp
     tests/entryparser_tests.cpp
+    tests/interaction_smoke.cpp
     tests/settings_smoke.cpp
     tests/ui_smoke.cpp
     resources/theme.qrc

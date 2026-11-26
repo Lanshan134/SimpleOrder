@@ -94,6 +94,7 @@ class Controller : public QObject {
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);
     void calendarEditorSmokeTest();
+    void interactionSmokeTest();
     void applyPreferences();
     bool visibleItem(const Item &) const;
     QList<Item> sortedItems(QList<Item>) const;
