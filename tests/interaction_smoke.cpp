@@ -70,8 +70,15 @@ void Controller::interactionSmokeTest(const QString &dir) {
     };
     QStringList calls;
     const auto edit = tasks->edit, complete = tasks->complete;
+    bool independentEditor = false;
     tasks->edit = [&, edit](qint64 id) {
         calls << "edit";
+        // The floating list opens the independent editor; note what opened, then close it.
+        QTimer::singleShot(0, this, [&] {
+            independentEditor = itemWindow && !manager->isVisible();
+            if (itemWindow)
+                itemWindow->close();
+        });
         edit(id);
     };
     tasks->complete = [&, complete](qint64 id) {
@@ -119,6 +126,7 @@ void Controller::interactionSmokeTest(const QString &dir) {
     floating->move(30000, 30000);
     click(at(tasks, a, body));
     require(calls == QStringList{"edit"} && !stored(a).done, "a body click edits even if the pointer has moved");
+    require(independentEditor, "a floating body click opens the independent editor, not the manager");
     floating->move(home);
     // D12: in settings preview the circle does nothing.
     reset();
@@ -231,6 +239,65 @@ void Controller::interactionSmokeTest(const QString &dir) {
     const QRect overlap = QRect(grip->mapTo(floating, QPoint()), grip->size()) &
                           QRect(quickAdd->mapTo(floating, QPoint()), quickAdd->size());
     require(overlap.isEmpty() || floating->childAt(overlap.center()) == quickAdd, "add button corner is clickable");
+    // Rule: actions on another item leave the draft alone; the draft's own circle completes it and keeps the draft.
+    reset();
+    choose(a);
+    title->setText("交互甲 草稿");
+    manager->hide();
+    prompts = 0;
+    watch.start();
+    click(at(tasks, b, check));
+    schedule(c, today.addDays(5));
+    tasks->togglePin(b);
+    click(at(tasks, a, check));
+    require(prompts == 0 && stored(b).done && stored(b).pinned &&
+                stored(c).date == today.addDays(5).toString(Qt::ISODate) && stored(a).done && selected == a &&
+                title->text() == "交互甲 草稿",
+            "completing, pinning and rescheduling do not ask about the draft");
+    saveEditor();
+    require(stored(a).done && stored(a).title == "交互甲 草稿", "saving the draft keeps its own completion");
+    watch.stop();
+    for (auto id : {a, b, c}) {
+        auto i = stored(id);
+        i.pinned = false;
+        i.title = id == a ? "交互甲" : i.title;
+        store.save(i);
+    }
+    // Rule: count and cumulative plans have no date to drag to; interval and chosen-day plans do.
+    {
+        QList<Item> plans;
+        for (auto kind : {"quota", "total", "interval", "dates"}) {
+            Item plan;
+            plan.type = "plan";
+            plan.title = QString("交互计划 ") + kind;
+            plan.rule = {{"kind", kind}, {"period", "day"}, {"first", today.toString(Qt::ISODate)}, {"interval", 2},
+                         {"basis", "fixed"}, {"mode", "week"}, {"days", QJsonArray{1}}, {"missing", "skip"},
+                         {"start", ""}, {"end", ""}};
+            plan.id = store.save(plan).id;
+            plans << plan;
+        }
+        DragProbe probe;
+        probe.setAttribute(Qt::WA_DontShowOnScreen);
+        probe.resize(300, 200);
+        probe.fill(plans);
+        probe.show();
+        QApplication::processEvents();
+        for (const auto &plan : plans) {
+            const QPoint p = at(&probe, plan.id, body);
+            send(probe.viewport(), QEvent::MouseButtonPress, p, Qt::LeftButton, Qt::LeftButton);
+            send(probe.viewport(), QEvent::MouseMove, p + QPoint(8, 0), Qt::NoButton, Qt::LeftButton);
+            send(probe.viewport(), QEvent::MouseMove, p + QPoint(25, 0), Qt::NoButton, Qt::LeftButton);
+            send(probe.viewport(), QEvent::MouseButtonRelease, p + QPoint(25, 0), Qt::LeftButton, Qt::NoButton);
+        }
+        const auto before = stored(plans[0].id);
+        refresh();
+        schedule(plans[0].id, today.addDays(3));
+        require(probe.drags == 2, qPrintable(QString("only interval and chosen-day plans drag (%1)").arg(probe.drags)));
+        require(stored(plans[0].id).rule == before.rule && stored(plans[0].id).date == before.date,
+                "a count plan does not reschedule");
+        for (const auto &plan : plans)
+            store.remove(plan.id);
+    }
     tasks->edit = edit;
     tasks->complete = complete;
     reset();

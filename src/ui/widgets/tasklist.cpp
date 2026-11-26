@@ -179,6 +179,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         row->setData(Qt::UserRole + 2, i.type == "plan");
         row->setData(Qt::UserRole + 3, i.done);
         row->setData(Qt::UserRole + 5, i.pinned);
+        row->setData(Qt::UserRole + 7, reschedulable(i));
         bool dates = !property("showDates").isValid() || property("showDates").toBool();
         bool times = !property("showTimes").isValid() || property("showTimes").toBool();
         bool counts = !property("showProgress").isValid() || property("showProgress").toBool();
@@ -212,7 +213,7 @@ void TaskList::fill(const QList<Item> &items, bool headings) {
         row->setToolTip(i.title + "\n" + groupName(i.group) + " · " + (i.date.isEmpty() ? "未安排" : i.date) +
                         (i.time.isEmpty() ? QString() : " " + i.time) + "\n" +
                         (i.type == "plan" ? "点击圆圈记录进度；达标后完成" : "点击圆圈切换完成") +
-                        "\n拖到日历可改期");
+                        (reschedulable(i) ? "\n拖到日历可改期" : ""));
     }
     if (currentIndex >= 0) {
         int restore = -1;

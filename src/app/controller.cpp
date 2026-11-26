@@ -127,13 +127,10 @@ void Controller::guard(const std::function<void()> &fn) {
     }
 }
 void Controller::bindList(TaskList *list) {
-    list->edit = [this](qint64 id) { choose(id); };
-    list->contextEdit = [this, list](qint64 id) {
-        if (list == pins || list == tasks || list == plans || list == floatDay)
-            editFloatingItem(id);
-        else
-            choose(id);
-    };
+    // The floating lists open the independent editor and leave the manager where it is.
+    const bool floatingList = list == pins || list == tasks || list == plans || list == floatDay;
+    list->edit = [this, floatingList](qint64 id) { floatingList ? editFloatingItem(id) : choose(id); };
+    list->contextEdit = list->edit;
     list->complete = [this, list](qint64 id) {
         guard([&] { complete(id, list == dayItems || list == floatDay ? day : QDate::currentDate()); });
     };
@@ -141,7 +138,8 @@ void Controller::bindList(TaskList *list) {
         guard([&] {
             if (settingsPreview)
                 return;
-            if (!leaveEditor())
+            // Pinning another item leaves the draft alone.
+            if (id == selected && !leaveEditor())
                 return;
             for (auto i : store.all())
                 if (i.id == id) {
@@ -301,8 +299,7 @@ void Controller::setDate(QDate d) {
 void Controller::complete(qint64 id, QDate occurrence) {
     if (settingsPreview)
         return;
-    if (!leaveEditor())
-        return;
+    // Completing never touches the draft, not even its own item's: the hidden completion fields follow below.
     for (auto i : items)
         if (i.id == id) {
             if (i.type == "plan" && !i.rule.isEmpty()) {
@@ -318,6 +315,12 @@ void Controller::complete(qint64 id, QDate occurrence) {
             } else
                 i.done = !i.done;
             store.save(i);
+            if (id == selected && hasEditorChanges()) {
+                // Saving the draft later must not undo this completion.
+                QSignalBlocker a(done), b(progress);
+                done->setChecked(i.done);
+                progress->setValue(i.progress);
+            }
             refresh();
             return;
         }
@@ -325,19 +328,17 @@ void Controller::complete(qint64 id, QDate occurrence) {
 void Controller::schedule(qint64 id, QDate d) {
     if (settingsPreview)
         return;
-    if (!leaveEditor())
+    // Rescheduling another item leaves the draft alone.
+    if (id == selected && !leaveEditor())
         return;
     for (auto i : items)
         if (i.id == id) {
+            if (!reschedulable(i))
+                return;
             i.date = d.toString(Qt::ISODate);
-            if (i.type == "plan" && !i.rule.isEmpty()) {
-                auto k = i.rule.value("kind").toString();
-                if (k == "total")
-                    i.rule.insert("end", i.date);
-                else if (k == "interval")
+            if (i.type == "plan") {
+                if (i.rule.value("kind").toString() == "interval")
                     i.rule.insert("first", i.date);
-                else if (k == "quota")
-                    i.rule.insert("start", i.date);
                 else {
                     auto days = i.rule.value("days").toArray();
                     int value = i.rule.value("mode").toString() == "week" ? d.dayOfWeek() : d.day();
@@ -349,8 +350,8 @@ void Controller::schedule(qint64 id, QDate d) {
             }
             store.save(i);
             day = d;
-            // The independent editor keeps the item it shows.
-            if (!itemWindow)
+            // The independent editor, or a draft, keeps the item it shows.
+            if (!itemWindow && !hasEditorChanges())
                 selected = id;
             refresh();
             return;

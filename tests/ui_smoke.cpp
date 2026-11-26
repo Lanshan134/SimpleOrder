@@ -293,13 +293,14 @@ bool Controller::smokeTest(const QString &dir) {
     auto table = cal->findChild<QAbstractItemView *>();
     auto idx = table->model()->index(2, 3);
     QPoint pt = table->viewport()->mapTo(cal, table->visualRect(idx).center());
+    // A task: count plans such as the one above have no single date to move.
     QMimeData mime;
-    mime.setData("application/x-lighttask-id", QByteArray::number(id));
+    mime.setData("application/x-lighttask-id", QByteArray::number(detailId));
     QDragEnterEvent enter(pt, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(cal, &enter);
     QDropEvent drop(QPointF(pt), Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(cal, &drop);
-    require(drop.isAccepted() && QDate::fromString(get(id).date, Qt::ISODate).day() == idx.data().toInt(),
+    require(drop.isAccepted() && QDate::fromString(get(detailId).date, Qt::ISODate).day() == idx.data().toInt(),
             "drop target date");
     store.saveCategory({"backup_type", "备份类型", "#f08080"});
     reloadCategories();
