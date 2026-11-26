@@ -9,6 +9,8 @@ class Calendar : public QCalendarWidget {
   public:
     bool showCompleted = true, displayOutside = true;
     bool previewOnly = false;
+    // Expanded cells list their items by name when at least two rows fit; otherwise they keep the dots.
+    bool expanded = false;
     // Off where the calendar sits in a scrolling page: the wheel then belongs to that page.
     bool wheelChangesMonth = true;
     bool mouseDateSelection = false;
@@ -17,7 +19,10 @@ class Calendar : public QCalendarWidget {
     QList<Item> items;
     std::function<void(qint64, QDate)> schedule;
     QPushButton *yearButton = nullptr, *monthButton = nullptr, *todayButton = nullptr;
+    QPushButton *expandButton = nullptr;
     explicit Calendar(QWidget *parent = nullptr);
+    void setExpanded(bool);
+    QList<Item> itemsOn(const QDate &) const;
     void repaintCells() {
         updateCells();
         updateHeader();

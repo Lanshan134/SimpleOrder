@@ -18,7 +18,8 @@ class GlyphButton : public QPushButton {
     }
     QSize sizeHint() const override {
         const int side = qRound((glyph == Glyph::Plus ? 32 : 26) * widgetScale(this));
-        return QSize(side, side);
+        // The calendar handle is a low strip under the grid.
+        return glyph == Glyph::Down ? QSize(side, qRound(16 * widgetScale(this))) : QSize(side, side);
     }
     QSize minimumSizeHint() const override {
         return sizeHint();
@@ -39,6 +40,12 @@ class GlyphButton : public QPushButton {
         if (glyph == Glyph::Plus) {
             p.drawLine(c + QPointF(-5 * unit, 0), c + QPointF(5 * unit, 0));
             p.drawLine(c + QPointF(0, -5 * unit), c + QPointF(0, 5 * unit));
+        } else if (glyph == Glyph::Down) {
+            // Checked, it points back up: the strip then collapses what it expanded.
+            const qreal rise = isChecked() ? -2.5 * unit : 2.5 * unit;
+            const QPointF chevron[] = {c + QPointF(-5 * unit, -rise), c + QPointF(0, rise),
+                                       c + QPointF(5 * unit, -rise)};
+            p.drawPolyline(chevron, 3);
         } else {
             const qreal side = glyph == Glyph::Left ? -2.5 * unit : 2.5 * unit;
             const QPointF chevron[] = {c + QPointF(-side, -5 * unit), c + QPointF(side, 0),

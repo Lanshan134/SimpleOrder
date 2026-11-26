@@ -190,7 +190,8 @@ void Controller::scaleFloating(bool force) {
     const qreal factor =
         qBound(0.7,
                settings.value("scaleWithWindow", true).toBool()
-                   ? qMin(font * qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0)),
+                   ? qMin(font * qSqrt(qreal(floating->width()) * floating->height() /
+                                         (420.0 * 480.0 * (floatCal->expanded ? 1.5 : 1.0))),
                           floating->width() / FULL_CONTENT_WINDOW_WIDTH)
                    : font * theme::textScale,
                3.0);
@@ -291,7 +292,7 @@ void Controller::scaleFloating(bool force) {
         list->verticalScrollBar()->setValue(qRound(position * factor / previous));
         list->viewport()->update();
     }
-    floatCal->setMinimumSize(px(MIN_CONTENT_WIDTH), px(250));
+    floatCal->setMinimumSize(px(MIN_CONTENT_WIDTH), px(floatCal->expanded ? 440 : 250));
     floatCal->repaintCells();
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setFixedSize(px(16), px(16));

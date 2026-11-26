@@ -195,6 +195,9 @@ void Controller::buildManager() {
     connect(closeEditorButton, &QPushButton::clicked, this, [this] { closeEditor(); });
     connect(search, &QLineEdit::textChanged, this, [this] { updateLists(); });
     for (auto calendar : {cal, floatCal}) {
+        calendar->expandButton->show();
+        connect(calendar->expandButton, &QPushButton::clicked, this,
+                [this, calendar](bool on) { expandCalendar(calendar, on); });
         calendar->dateGesture = [this](bool started) {
             calendarDateEditPending = started && dateFieldActive;
             if (started)
@@ -286,6 +289,26 @@ void Controller::scaleManager() {
     group->setIconSize(QSize(qRound(16 * factor), qRound(16 * factor)));
     reloadCategories();
     arrangeFieldButtons(manager);
+}
+void Controller::expandCalendar(Calendar *calendar, bool expanded) {
+    calendar->setExpanded(expanded);
+    settings.setValue(calendar == cal ? "managerCalendarExpanded" : "floatingCalendarExpanded", expanded);
+    if (calendar == cal) {
+        // The cells now name the items, so the day list gives its height to the calendar.
+        // The editor is a column of its own and keeps its size and draft.
+        dayItems->setMaximumHeight(expanded ? scaled(manager, 2 * ROW_HEIGHT) : QWIDGETSIZE_MAX);
+        return;
+    }
+    // The floating window grows downward at its width and scale: scaleFloating takes the added area back out.
+    const QRect screen = floating->screen()->availableGeometry();
+    floating->resize(floating->width(),
+                     qMin(screen.height(), qRound(floating->height() * (expanded ? 1.5 : 1 / 1.5))));
+    const QRect frame = floating->frameGeometry();
+    const int shift =
+        expanded ? qBound(0, frame.bottom() - screen.bottom(), frame.top() - screen.top()) : -floatingShift;
+    floating->move(floating->x(), floating->y() - shift);
+    floatingShift = expanded ? shift : 0;
+    scaleFloating(true);
 }
 void Controller::openEditor() {
     if (itemWindow || inspector->isVisibleTo(manager))

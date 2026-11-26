@@ -98,7 +98,7 @@ QFrame#datePopup { background:@surface; border:1px solid @line-strong; }
 QCalendarWidget { background:transparent; }
 QPushButton#calendarTitle { color:@ink; font-size:16px; font-weight:600; padding:2px 3px; }
 QPushButton#calendarTitle::menu-indicator { image:none; width:0; }
-QPushButton#calendarArrow { padding:0; }
+QPushButton#calendarArrow, QPushButton#calendarExpand { padding:0; }
 QCalendarWidget QAbstractItemView { background:@surface; color:@ink; font-size:14px; selection-background-color:transparent; selection-color:@ink; outline:0; }
 
 QWidget#editorHeader { border-bottom:1px solid @line; }

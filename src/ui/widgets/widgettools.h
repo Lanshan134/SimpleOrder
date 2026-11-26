@@ -2,7 +2,7 @@
 #include <QtWidgets>
 #include <functional>
 
-enum class Glyph { Plus, Left, Right };
+enum class Glyph { Plus, Left, Right, Down };
 QPushButton *glyphButton(Glyph glyph, const QString &label, const QString &name);
 QPushButton *button(const QString &text, const QString &name = {});
 QLabel *heading(const QString &text, const QString &name = "heading");

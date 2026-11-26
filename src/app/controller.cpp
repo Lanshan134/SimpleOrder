@@ -23,6 +23,13 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
     stack->setCurrentIndex(calendarView ? 1 : 0);
     switchButton->setText(calendarView ? "列表" : "日历");
     floating->findChild<QLabel *>("windowTitle")->setText(calendarView ? "日历" : "任务");
+    // Before restoring geometry: a remembered floating size already includes the expansion.
+    if (settings.value("floatingCalendarExpanded", false).toBool()) {
+        floatCal->setExpanded(true);
+        floating->resize(floating->width(), floating->height() * 3 / 2);
+    }
+    if (settings.value("managerCalendarExpanded", false).toBool())
+        expandCalendar(cal, true);
     if (!testing) {
         if (settings.value("rememberGeometry", true).toBool()) {
             floating->restoreGeometry(settings.value("floatingGeometry").toByteArray());
@@ -46,8 +53,7 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
             for (auto &i : items)
                 i = planState(i, QDate::currentDate());
             updateLists();
-            cal->items = items;
-            floatCal->items = items;
+            cal->items = floatCal->items = sortedItems(items);
             cal->repaintCells();
             floatCal->repaintCells();
             maybeAutoBackup();
@@ -235,8 +241,8 @@ void Controller::refresh() {
         cal->setSelectedDate(day);
         floatCal->setSelectedDate(day);
     }
-    cal->items = items;
-    floatCal->items = items;
+    // The order the day lists use, so a cell names the same items they put first.
+    cal->items = floatCal->items = sortedItems(items);
     cal->repaintCells();
     floatCal->repaintCells();
     updateLists();

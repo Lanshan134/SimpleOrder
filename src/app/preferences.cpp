@@ -51,6 +51,7 @@ void Controller::applyPreferences() {
     }
     items = store.all();
     updateLists();
+    cal->items = floatCal->items = sortedItems(items);
     if (!dirty && !selected)
         fillEditor();
     settings.sync();
