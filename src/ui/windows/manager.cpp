@@ -322,15 +322,28 @@ void Controller::expandCalendar(Calendar *calendar, bool expanded) {
         return;
     }
     // The floating window grows downward at its width and scale: scaleFloating takes the added area back out.
-    const QRect screen = floating->screen()->availableGeometry();
-    floating->resize(floating->width(),
-                     qMin(screen.height(), qRound(floating->height() * (expanded ? 1.5 : 1 / 1.5))));
-    const QRect frame = floating->frameGeometry();
-    const int shift =
-        expanded ? qBound(0, frame.bottom() - screen.bottom(), frame.top() - screen.top()) : -floatingShift;
-    floating->move(floating->x(), floating->y() - shift);
-    floatingShift = expanded ? shift : 0;
+    // Collapsing returns to the height it had, even if the screen cut the expansion short.
+    if (expanded) {
+        floatingCompactHeight = floating->height();
+        floating->resize(floating->width(), qRound(floating->height() * 1.5));
+        floatingShift = fitFloating();
+    } else {
+        floating->resize(floating->width(),
+                         floatingCompactHeight ? floatingCompactHeight : qRound(floating->height() / 1.5));
+        floating->move(floating->x(), floating->y() + floatingShift);
+        floatingShift = floatingCompactHeight = 0;
+    }
     scaleFloating(true);
+}
+// Keeps the floating window on its screen: no taller than it, then moved up. Returns how far it moved.
+int Controller::fitFloating() {
+    const QRect screen = floating->screen()->availableGeometry();
+    const int frame = floating->frameGeometry().height() - floating->height();
+    floating->resize(floating->width(), qMin(screen.height() - frame, floating->height()));
+    const QRect box = floating->frameGeometry();
+    const int shift = qBound(0, box.bottom() - screen.bottom(), box.top() - screen.top());
+    floating->move(floating->x(), floating->y() - shift);
+    return shift;
 }
 void Controller::openEditor() {
     if (itemWindow || inspector->isVisibleTo(manager))

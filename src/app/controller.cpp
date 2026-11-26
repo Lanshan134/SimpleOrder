@@ -10,6 +10,7 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
     reloadCategories();
     buildFloating();
     buildManager();
+    cal->sorted = floatCal->sorted = [this](QList<Item> list) { return sortedItems(list); };
     setupFloatingScaling();
     if (testing) {
         floating->setAttribute(Qt::WA_DontShowOnScreen);
@@ -44,6 +45,11 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
             if (!onScreen)
                 w->move(visible.topLeft() + QPoint(60, 60));
         }
+    }
+    // An expanded floating calendar takes its expanded height in a window that fits the screen.
+    if (floatCal->expanded) {
+        floatingShift = fitFloating();
+        scaleFloating(true);
     }
     auto retentionTimer = new QTimer(this);
     retentionTimer->setInterval(60000);
@@ -229,7 +235,7 @@ void Controller::refresh() {
         cal->setSelectedDate(day);
         floatCal->setSelectedDate(day);
     }
-    // The order the day lists use, so a cell names the same items they put first.
+    // Each cell sorts its day's items itself (Calendar::sorted), naming those the day lists put first.
     cal->items = floatCal->items = sortedItems(items);
     cal->repaintCells();
     floatCal->repaintCells();

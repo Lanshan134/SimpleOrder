@@ -187,6 +187,38 @@ void Controller::calendarSmokeTest(const QString &directory) {
     }
     floating->resize(420, 720);
     settle();
+    // Narrow cells cut long titles without measuring them character by character.
+    {
+        QList<qint64> filler;
+        const auto paintWith = [&](int length) {
+            for (auto id : filler)
+                store.remove(id);
+            filler.clear();
+            for (int date = 1; date <= 28; ++date)
+                for (int n = 0; n < 3; ++n) {
+                    Item item;
+                    item.title = QString(length, QChar(0x957f)) + QString::number(n);
+                    item.date = QDate(2026, 11, date).toString(Qt::ISODate);
+                    filler << store.save(item).id;
+                }
+            refresh();
+            settle();
+            QElapsedTimer timer;
+            timer.start();
+            for (int pass = 0; pass < 3; ++pass)
+                floatCal->grab();
+            return timer.elapsed();
+        };
+        floatCal->setCurrentPage(2026, 11);
+        const qint64 brief = paintWith(4), lengthy = paintWith(199);
+        floatCal->grab().save(directory + "/calendar-floating-long-titles.png");
+        for (auto id : filler)
+            store.remove(id);
+        refresh();
+        require(
+            lengthy < 2 * brief + 60,
+            QString("long titles paint as fast as short ones (%1 ms against %2 ms)").arg(lengthy).arg(brief));
+    }
     floatCal->expandButton->click();
     settle();
     require(floating->size() == QSize(420, 480) && qAbs(floatingScale - compactScale) < .01 &&
@@ -203,6 +235,23 @@ void Controller::calendarSmokeTest(const QString &directory) {
     floatCal->expandButton->click();
     settle();
     require(floating->pos() == low && floating->height() == 480, "collapsing moves the window back down");
+    // A window the screen cuts short when expanded collapses to the height it had.
+    const int tall = screen.height() * 4 / 5;
+    floating->resize(420, tall);
+    floating->move(screen.left() + 40, screen.top() + 20);
+    const QPoint high = floating->pos();
+    floatCal->expandButton->click();
+    settle();
+    require(floating->frameGeometry().height() <= screen.height() && floating->height() < tall * 3 / 2,
+            "the screen cuts a tall window's expansion short");
+    floatCal->expandButton->click();
+    settle();
+    require(floating->height() == tall && floating->pos() == high,
+            QString("collapsing restores the height before the expansion (%1, was %2)")
+                .arg(floating->height())
+                .arg(tall));
+    floating->resize(420, 480);
+    settle();
     floating->move(compactAt);
 
     // The manager takes the height from the day list, never from the editor or its draft.
@@ -274,7 +323,25 @@ void Controller::calendarSmokeTest(const QString &directory) {
                     reopened.dayItems->maximumHeight() == 2 * ROW_HEIGHT &&
                     reopened.floating->height() == 720 && reopened.cal->expandButton->isChecked(),
                 "expansion is remembered per window");
+        require(reopened.floatCal->minimumHeight() == qRound(440 * reopened.floatingScale),
+                QString("a reopened expanded calendar keeps its expanded height (%1 at scale %2)")
+                    .arg(reopened.floatCal->minimumHeight())
+                    .arg(reopened.floatingScale));
     }
+    // A window too tall for the screen once expanded is fitted to it on start.
+    theme::textScale = 2.5;
+    {
+        Controller reopened(store, settings.fileName(), true);
+        const QRect available = reopened.floating->screen()->availableGeometry(),
+                    box = reopened.floating->frameGeometry();
+        require(reopened.floatCal->expanded && box.height() <= available.height() &&
+                    box.bottom() <= available.bottom() &&
+                    reopened.floatCal->minimumHeight() == qRound(440 * reopened.floatingScale),
+                QString("a reopened expanded window fits the screen (%1 tall, screen %2)")
+                    .arg(box.height())
+                    .arg(available.height()));
+    }
+    theme::textScale = 1.0;
     // Larger text: the manager cells still fit item rows.
     setDate(busy);
     theme::textScale = 1.5;
@@ -292,4 +359,45 @@ void Controller::calendarSmokeTest(const QString &directory) {
     expandCalendar(cal, false);
     expandCalendar(floatCal, false);
     settle();
+
+    // A cell lists a day's items in the day list's order, with each plan's progress on that day.
+    const QDate later = QDate::currentDate().addDays(7);
+    settings.setValue("sortMode", "name");
+    Item ahead;
+    ahead.title = "A 计划";
+    ahead.type = "plan";
+    ahead.done = true;
+    ahead.progress = 1;
+    ahead.showCalendar = true;
+    ahead.rule = {
+        {"kind", "dates"}, {"mode", "week"}, {"days", QJsonArray{later.dayOfWeek()}}, {"missing", "skip"}};
+    ahead.records = {
+        {planBucket(ahead, later),
+         QJsonObject{{"count", 1}, {"at", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}}}};
+    const qint64 planId = store.save(ahead).id;
+    Item behind;
+    behind.title = "B 任务";
+    behind.date = later.toString(Qt::ISODate);
+    const qint64 taskId = store.save(behind).id;
+    applyPreferences();
+    setDate(later);
+    settle();
+    QList<qint64> cellOrder, listOrder;
+    for (const auto &i : floatCal->itemsOn(later))
+        cellOrder << i.id;
+    for (int n = 0; n < floatDay->count(); ++n)
+        listOrder << floatDay->item(n)->data(Qt::UserRole).toLongLong();
+    require(listOrder == QList<qint64>{taskId, planId} && cellOrder == listOrder,
+            "a cell lists the day's items in the day list's order");
+    // Changing a setting keeps each plan's progress for today.
+    bool planOpen = false;
+    for (int n = 0; n < plans->count(); ++n)
+        if (plans->item(n)->data(Qt::UserRole).toLongLong() == planId)
+            planOpen = !plans->item(n)->data(Qt::UserRole + 3).toBool();
+    require(planOpen, "a plan done on another day stays open today after a settings change");
+    store.remove(planId);
+    store.remove(taskId);
+    settings.setValue("sortMode", "date");
+    applyPreferences();
+    setDate(QDate::currentDate());
 }

@@ -40,8 +40,10 @@ class Controller : public QObject {
     void closeEditor();
     void scaleManager();
     void expandCalendar(Calendar *, bool);
-    // How far expanding moved the floating window up to stay on screen; collapsing moves it back.
-    int floatingShift = 0;
+    // How far expanding moved the floating window up to stay on screen, and its height before;
+    // collapsing restores both. They last for the session.
+    int floatingShift = 0, floatingCompactHeight = 0;
+    int fitFloating();
     QLineEdit *search = nullptr, *title = nullptr, *date = nullptr, *time = nullptr;
     QComboBox *group = nullptr, *type = nullptr, *timeKind = nullptr;
     QCheckBox *pinned = nullptr, *done = nullptr, *showCalendar = nullptr;

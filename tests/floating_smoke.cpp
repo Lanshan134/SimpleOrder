@@ -1,6 +1,18 @@
 #include "app/controller.h"
 #include "wheelevent.h"
 
+namespace {
+// Where a scrollbar's style draws its handle.
+struct BarAccess : QScrollBar {
+    static QRect handle(QScrollBar *bar) {
+        QStyleOptionSlider option;
+        const auto init = &BarAccess::initStyleOption;
+        (bar->*init)(&option);
+        return bar->style()->subControlRect(QStyle::CC_ScrollBar, &option, QStyle::SC_ScrollBarSlider, bar);
+    }
+};
+} // namespace
+
 // Runs last: it replaces the test database's items and leaves the settings it changes behind.
 void Controller::floatingSmokeTest(const QString &directory) {
     const auto require = [](bool ok, const QString &label) {
@@ -386,13 +398,33 @@ void Controller::scrollbarSmokeTest(const QString &directory) {
             "the page bar has a track and the day list sits on its own panel");
     require(image.pixelColor(pageBar.left() + 1, pageBar.top() + 3).rgb() != track.rgb(),
             "a gap separates the page bar from the list");
-    // Each bar moves only what it belongs to.
-    outer->setValue(0);
-    inner->setValue(0);
-    outer->setValue(outer->maximum());
-    require(inner->value() == 0, "the page bar leaves the list");
-    inner->setValue(inner->maximum());
-    require(outer->value() == outer->maximum(), "the list bar leaves the page");
+    // Dragging each handle moves only what it belongs to; the press goes to whatever lies under the handle.
+    const auto drag = [&](QScrollBar *bar, int distance) {
+        const QPoint start = bar->mapTo(floating, BarAccess::handle(bar).center());
+        auto target = floating->childAt(start);
+        require(target == bar, "the handle is under the pointer");
+        const auto send = [&](QEvent::Type type, QPoint at, Qt::MouseButton button, Qt::MouseButtons held) {
+            const QPoint local = target->mapFrom(floating, at);
+            QMouseEvent event(type, local, target->mapToGlobal(local), button, held, Qt::NoModifier);
+            QApplication::sendEvent(target, &event);
+        };
+        send(QEvent::MouseButtonPress, start, Qt::LeftButton, Qt::LeftButton);
+        for (int step = 1; step <= 4; ++step)
+            send(QEvent::MouseMove, start + QPoint(0, distance * step / 4), Qt::NoButton, Qt::LeftButton);
+        send(QEvent::MouseButtonRelease, start + QPoint(0, distance), Qt::LeftButton, Qt::NoButton);
+        settle();
+    };
+    const auto listTop = [&] { return floatDay->mapTo(page->viewport(), QPoint()).y(); };
+    const auto firstRow = [&] { return floatDay->indexAt(QPoint(4, 4)).row(); };
+    const int pageEnd = outer->value(), topAtEnd = listTop();
+    drag(inner, 24);
+    const int listAt = inner->value(), rowAt = firstRow();
+    require(listAt > 0 && rowAt > 0 && outer->value() == pageEnd && listTop() == topAtEnd,
+            "dragging the list bar scrolls the list and leaves the page");
+    drag(outer, -40);
+    require(outer->value() < pageEnd && listTop() > topAtEnd && inner->value() == listAt &&
+                firstRow() == rowAt,
+            "dragging the page bar scrolls the page and leaves the list");
     // Alone, each bar still reads as its region's.
     show(QSize(420, 480), busy, 100);
     require(!outer->isVisible() && inner->isVisible() && box(floatDay).contains(box(inner)),

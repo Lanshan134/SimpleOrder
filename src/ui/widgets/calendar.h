@@ -17,6 +17,8 @@ class Calendar : public QCalendarWidget {
     std::function<void(bool)> dateGesture;
     int retentionHours = 48, maxDots = 3;
     QList<Item> items;
+    // Orders each day's items as the day lists do.
+    std::function<QList<Item>(QList<Item>)> sorted;
     std::function<void(qint64, QDate)> schedule;
     QPushButton *yearButton = nullptr, *monthButton = nullptr, *todayButton = nullptr;
     QPushButton *expandButton = nullptr;

@@ -162,10 +162,21 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
             }
             const QFontMetrics rowMetrics(text);
             QString title = (wide && !i.time.isEmpty() ? i.time + " " : QString()) + i.title;
-            while (!wide && title.size() > 1 && rowMetrics.horizontalAdvance(title) > words.width())
-                title.chop(1);
+            if (!wide) {
+                // The longest start that fits, at least one character; a narrow cell holds far fewer than 64.
+                title.truncate(64);
+                int fits = 1;
+                for (int above = title.size(); fits < above;) {
+                    const int middle = (fits + above + 1) / 2;
+                    if (rowMetrics.horizontalAdvance(title.left(middle)) <= words.width())
+                        fits = middle;
+                    else
+                        above = middle - 1;
+                }
+                title.truncate(fits);
+            }
             p->drawText(words, Qt::AlignVCenter | Qt::TextSingleLine,
-                        rowMetrics.elidedText(title, Qt::ElideRight, int(words.width())));
+                        wide ? rowMetrics.elidedText(title, Qt::ElideRight, int(words.width())) : title);
             const QColor mark = foregroundColor(this, groupColor(i.group));
             p->setOpacity(i.done ? 0.4 : 1.0);
             p->setPen(QPen(mark, scale));
@@ -209,7 +220,8 @@ QList<Item> Calendar::itemsOn(const QDate &d) const {
         if (!i.done || (showCompleted && visibleInActive(i, QDateTime::currentDateTimeUtc(), retentionHours)))
             hits << i;
     }
-    return hits;
+    // Sorted with the day's progress, as the day lists are, not today's.
+    return sorted ? sorted(hits) : hits;
 }
 void Calendar::setExpanded(bool on) {
     expanded = on;
@@ -291,6 +303,7 @@ bool Calendar::eventFilter(QObject *watched, QEvent *event) {
         QDate under;
         if (auto viewport = qobject_cast<QWidget *>(watched); viewport && event->type() == QEvent::MouseMove)
             under = dateAt(viewport->mapTo(this, static_cast<QMouseEvent *>(event)->pos()));
+        // Only the cells it leaves and enters repaint: the whole grid is costly under the floating halo.
         if (under != hoverDate) {
             updateDate(hoverDate);
             hoverDate = under;
