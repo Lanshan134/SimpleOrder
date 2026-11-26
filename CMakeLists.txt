@@ -15,6 +15,7 @@ add_executable(SimpleOrder WIN32
     src/storage/store.cpp
     src/ui/theme/appearance.cpp
     src/ui/widgets/calendar.cpp
+    src/ui/widgets/categorypopup.cpp
     src/ui/widgets/planeditor.cpp
     src/ui/widgets/smartentry.cpp
     src/ui/widgets/tasklist.cpp
@@ -24,7 +25,10 @@ add_executable(SimpleOrder WIN32
     src/ui/windows/manager.cpp
     src/ui/windows/settings.cpp
     src/ui/windows/window.cpp
+    tests/calendar_smoke.cpp
     tests/entryparser_tests.cpp
+    tests/floating_smoke.cpp
+    tests/interaction_smoke.cpp
     tests/settings_smoke.cpp
     tests/ui_smoke.cpp
     resources/theme.qrc
@@ -37,6 +41,11 @@ add_custom_command(TARGET SimpleOrder POST_BUILD
     VERBATIM
 )
 target_link_libraries(SimpleOrder PRIVATE Qt5::Widgets Qt5::Sql)
+if(WIN32)
+ # The executable's icon; qmake writes the same resource from RC_ICONS.
+ target_sources(SimpleOrder PRIVATE resources/app.rc)
+ target_link_libraries(SimpleOrder PRIVATE shell32)
+endif()
 if(MSVC)
  target_compile_options(SimpleOrder PRIVATE /utf-8)
 endif()

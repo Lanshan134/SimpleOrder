@@ -74,12 +74,19 @@ QSlider::handle:horizontal:focus { background:@accent; border-color:@ink; }
 QListWidget { background:transparent; outline:0; border:0; }
 QListWidget::item { border:0; }
 QScrollArea { background:transparent; }
-QScrollArea#floatingScroll > QWidget > QWidget { background:transparent; }
+QScrollArea#floatingScroll > QWidget > QWidget, QScrollArea#floatingCalendarScroll > QWidget > QWidget { background:transparent; }
 QScrollBar:vertical { width:8px; background:transparent; margin:0; }
 QScrollBar::handle:vertical { background:@handle; border-radius:4px; min-height:24px; }
 QScrollBar::handle:vertical:hover { background:@handle-hover; }
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
 QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical { background:transparent; }
+/* Floating calendar: the page's bar has a track at the window edge; the day list is a panel with a thin bar of its own. */
+QScrollArea#floatingCalendarScroll > QWidget > QScrollBar:vertical { width:14px; margin:0 0 0 4px; background:@line; border-radius:5px; }
+QScrollArea#floatingCalendarScroll > QWidget > QScrollBar::handle:vertical { background:@handle-hover; border-radius:5px; }
+QScrollArea#floatingCalendarScroll > QWidget > QScrollBar::handle:vertical:hover { background:@control-border; }
+QListWidget#floatingDay { background:@canvas; border-radius:6px; }
+QListWidget#floatingDay QScrollBar:vertical { width:6px; margin:2px 1px; }
+QListWidget#floatingDay QScrollBar::handle:vertical { border-radius:2px; min-height:16px; }
 
 QMenu { background:@surface; border:1px solid @line-strong; padding:4px; }
 QMenu::item { padding:6px 16px; border-radius:4px; font-size:14px; }
@@ -89,8 +96,9 @@ QMenu::separator { height:1px; background:@line; margin:4px 8px; }
 
 QFrame#datePopup { background:@surface; border:1px solid @line-strong; }
 QCalendarWidget { background:transparent; }
-QPushButton#calendarTitle { color:@ink; font-size:16px; font-weight:600; padding:2px 6px; }
-QPushButton#calendarArrow { padding:0; }
+QPushButton#calendarTitle { color:@ink; font-size:16px; font-weight:600; padding:2px 3px; }
+QPushButton#calendarTitle::menu-indicator { image:none; width:0; }
+QPushButton#calendarArrow, QPushButton#calendarExpand { padding:0; }
 QCalendarWidget QAbstractItemView { background:@surface; color:@ink; font-size:14px; selection-background-color:transparent; selection-color:@ink; outline:0; }
 
 QWidget#editorHeader { border-bottom:1px solid @line; }

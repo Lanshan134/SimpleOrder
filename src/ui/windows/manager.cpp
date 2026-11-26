@@ -1,5 +1,6 @@
 #include "app/controller.h"
 #include "ui/windows/settings.h"
+#include "ui/widgets/categorypopup.h"
 #include "ui/widgets/smartentry.h"
 #include "ui/widgets/widgettools.h"
 #include <algorithm>
@@ -118,7 +119,7 @@ void Controller::buildManager() {
 
     title = new QLineEdit;
     title->setMaxLength(1000);
-    title->setToolTip("可输入名称与日期时间，按回车识别后再保存。");
+    title->setToolTip("可输入名称、日期时间与 #类型，按回车识别后再保存。");
     connect(title, &QLineEdit::returnPressed, this, [this] { parseEditorTitle(); });
     date = new QLineEdit;
     date->installEventFilter(this);
@@ -157,9 +158,12 @@ void Controller::buildManager() {
     progress->setRange(0, 9999);
     progress->hide();
     notes = new QPlainTextEdit;
-    notes->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    notes->setFixedHeight(64);
-    form->addWidget(editorField("备注", notes));
+    notes->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    notes->setMinimumHeight(64);
+    // Notes take the height the other fields leave over.
+    auto notesField = editorField("备注", notes);
+    notesField->layout()->setAlignment({});
+    form->addWidget(notesField, 1);
     auto checkrow = new QHBoxLayout;
     pinned = new QCheckBox("置顶");
     done = new QCheckBox(editor);
@@ -169,7 +173,6 @@ void Controller::buildManager() {
     checkrow->addStretch();
     checkrow->addWidget(showCalendar);
     form->addLayout(checkrow);
-    form->addStretch();
     auto actions = new QHBoxLayout;
     auto save = button("保存修改", "primary"), cancel = button("放弃修改"), del = button("删除", "deleteItem");
     saveButton = save;
@@ -193,6 +196,9 @@ void Controller::buildManager() {
     connect(closeEditorButton, &QPushButton::clicked, this, [this] { closeEditor(); });
     connect(search, &QLineEdit::textChanged, this, [this] { updateLists(); });
     for (auto calendar : {cal, floatCal}) {
+        calendar->expandButton->show();
+        connect(calendar->expandButton, &QPushButton::clicked, this,
+                [this, calendar](bool on) { expandCalendar(calendar, on); });
         calendar->dateGesture = [this](bool started) {
             calendarDateEditPending = started && dateFieldActive;
             if (started)
@@ -245,6 +251,27 @@ void Controller::buildManager() {
         });
     });
     connect(date, &QLineEdit::textEdited, this, [this] { dateManuallyEdited = true; });
+    connect(group, QOverload<int>::of(&QComboBox::activated), this, [this] { groupManuallyEdited = true; });
+    // Choosing a suggestion fills the type field at once, so saving needs no Enter first.
+    auto categoryPopup = new CategoryPopup(
+        title,
+        [this] {
+            const bool task = type->currentData().toString() == "task";
+            return task ? title->text().left(title->cursorPosition()) : QString();
+        },
+        [this](int start, const Category &category) {
+            title->setSelection(start, title->cursorPosition() - start);
+            title->insert(QString());
+            group->setCurrentIndex(group->findData(category.id));
+            groupManuallyEdited = true;
+        });
+    connect(title, &QLineEdit::textEdited, this, [categoryPopup] { categoryPopup->refresh(); });
+    connect(title, &QLineEdit::cursorPositionChanged, this, [categoryPopup] {
+        if (categoryPopup->isOpen())
+            categoryPopup->refresh();
+    });
+    connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [categoryPopup] { categoryPopup->hide(); });
     auto changed = [this] {
         if (!refreshing) {
             dirty = hasEditorChanges();
@@ -284,6 +311,39 @@ void Controller::scaleManager() {
     group->setIconSize(QSize(qRound(16 * factor), qRound(16 * factor)));
     reloadCategories();
     arrangeFieldButtons(manager);
+}
+void Controller::expandCalendar(Calendar *calendar, bool expanded) {
+    calendar->setExpanded(expanded);
+    settings.setValue(calendar == cal ? "managerCalendarExpanded" : "floatingCalendarExpanded", expanded);
+    if (calendar == cal) {
+        // The cells now name the items, so the day list gives its height to the calendar.
+        // The editor is a column of its own and keeps its size and draft.
+        dayItems->setMaximumHeight(expanded ? scaled(manager, 2 * ROW_HEIGHT) : QWIDGETSIZE_MAX);
+        return;
+    }
+    // The floating window grows downward at its width and scale: scaleFloating takes the added area back out.
+    // Collapsing returns to the height it had, even if the screen cut the expansion short.
+    if (expanded) {
+        floatingCompactHeight = floating->height();
+        floating->resize(floating->width(), qRound(floating->height() * 1.5));
+        floatingShift = fitFloating();
+    } else {
+        floating->resize(floating->width(),
+                         floatingCompactHeight ? floatingCompactHeight : qRound(floating->height() / 1.5));
+        floating->move(floating->x(), floating->y() + floatingShift);
+        floatingShift = floatingCompactHeight = 0;
+    }
+    scaleFloating(true);
+}
+// Keeps the floating window on its screen: no taller than it, then moved up. Returns how far it moved.
+int Controller::fitFloating() {
+    const QRect screen = floating->screen()->availableGeometry();
+    const int frame = floating->frameGeometry().height() - floating->height();
+    floating->resize(floating->width(), qMin(screen.height() - frame, floating->height()));
+    const QRect box = floating->frameGeometry();
+    const int shift = qBound(0, box.bottom() - screen.bottom(), box.top() - screen.top());
+    floating->move(floating->x(), floating->y() - shift);
+    return shift;
 }
 void Controller::openEditor() {
     if (itemWindow || inspector->isVisibleTo(manager))

@@ -1,13 +1,26 @@
 #pragma once
 #include "domain/item.h"
+#include <QApplication>
 #include <QListWidget>
 #include <QMouseEvent>
 #include <functional>
 
 class QMenu;
 
+// 昨天, 今天 or 明天, and empty for any other day.
+QString relativeDay(const QDate &date, const QDate &today);
+// Relative words for the days people scan for; urgency colours today (1), overdue (2) and tomorrow (3).
+QString dateMarker(const QString &iso, const QDate &today, int *urgency);
+
 class TaskList : public QListWidget {
     Qt::MouseButton pressedButton = Qt::LeftButton;
+    qreal wheelRemainder = 0;
+    // A click completes or edits only when it is pressed and released in the same zone of the row.
+    bool pressedCheck = false, releasedCheck = false, pressedMovable = false;
+    // A press that moves past the drag distance is a drag, even where nothing can be dragged.
+    bool movedPastDrag = false;
+    QPoint pressedAt;
+    bool inCheck(const QPoint &p) const;
 
   public:
     std::function<void(qint64)> edit, contextEdit, complete, togglePin;
@@ -21,7 +34,29 @@ class TaskList : public QListWidget {
   protected:
     void mousePressEvent(QMouseEvent *event) override {
         pressedButton = event->button();
+        pressedCheck = inCheck(event->pos());
+        pressedAt = event->pos();
+        movedPastDrag = false;
+        const auto row = itemAt(event->pos());
+        pressedMovable = row && row->data(Qt::UserRole + 7).toBool();
         QListWidget::mousePressEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override {
+        releasedCheck = inCheck(event->pos());
+        QListWidget::mouseReleaseEvent(event);
+    }
+    // The first click may already have reordered the rows; the second press must not act on another item.
+    void mouseDoubleClickEvent(QMouseEvent *event) override {
+        pressedButton = Qt::NoButton;
+        event->accept();
+    }
+    // Only a left press on an item with a date to move drags it to the calendar.
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if (event->buttons() != Qt::NoButton &&
+            (event->pos() - pressedAt).manhattanLength() >= QApplication::startDragDistance())
+            movedPastDrag = true;
+        if (event->buttons() == Qt::NoButton || (pressedButton == Qt::LeftButton && pressedMovable))
+            QListWidget::mouseMoveEvent(event);
     }
     void startDrag(Qt::DropActions) override;
     void paintEvent(QPaintEvent *) override;

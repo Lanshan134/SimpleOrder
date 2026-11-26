@@ -3,6 +3,7 @@
 #include "ui/widgets/editorwidgets.h"
 #include "ui/widgets/smartentry.h"
 #include "ui/theme/appearance.h"
+#include <QtMath>
 
 namespace {
 class GlyphButton : public QPushButton {
@@ -11,14 +12,23 @@ class GlyphButton : public QPushButton {
   public:
     GlyphButton(Glyph kind, const QString &label, const QString &name) : glyph(kind) {
         setObjectName(name);
-        setAccessibleName(label);
-        setToolTip(label);
         setCursor(Qt::PointingHandCursor);
         setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        set(kind, label);
+    }
+    void set(Glyph kind, const QString &label) {
+        glyph = kind;
+        setAccessibleName(label);
+        setToolTip(label);
+        update();
     }
     QSize sizeHint() const override {
-        const int side = qRound((glyph == Glyph::Plus ? 32 : 26) * widgetScale(this));
-        return QSize(side, side);
+        const int base = glyph == Glyph::Plus                                                    ? 32
+                         : glyph == Glyph::Left || glyph == Glyph::Right || glyph == Glyph::Down ? 26
+                                                                                                 : 28;
+        const int side = qRound(base * widgetScale(this));
+        // The calendar handle is a low strip under the grid.
+        return glyph == Glyph::Down ? QSize(side, qRound(16 * widgetScale(this))) : QSize(side, side);
     }
     QSize minimumSizeHint() const override {
         return sizeHint();
@@ -36,9 +46,54 @@ class GlyphButton : public QPushButton {
                                                   : foregroundColor(this, theme::color("ink-control"));
         p.setPen(QPen(ink, 1.6 * unit, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         const QPointF c = QRectF(rect()).center();
+        if (glyph != Glyph::Plus && glyph != Glyph::Left && glyph != Glyph::Right && glyph != Glyph::Down) {
+            // The title bar icons share a 16-unit grid centred on the button.
+            // Half a pixel keeps the straight strokes on one pixel column at 100%.
+            p.translate(c + QPointF(.5, .5));
+            p.scale(unit, unit);
+            p.setPen(QPen(ink, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            if (glyph == Glyph::Calendar) {
+                p.drawRoundedRect(QRectF(-6, -5, 12, 11), 2, 2);
+                p.drawLine(QPointF(-6, -1.5), QPointF(6, -1.5));
+                p.drawLine(QPointF(-2.75, -7), QPointF(-2.75, -4));
+                p.drawLine(QPointF(2.75, -7), QPointF(2.75, -4));
+            } else if (glyph == Glyph::List) {
+                for (qreal y : {-4.5, 0.0, 4.5})
+                    p.drawLine(QPointF(-2, y), QPointF(6.5, y));
+                p.setPen(Qt::NoPen);
+                p.setBrush(ink);
+                for (qreal y : {-4.5, 0.0, 4.5})
+                    p.drawEllipse(QPointF(-5.5, y), 1.2, 1.2);
+            } else if (glyph == Glyph::Manager) {
+                // A window with a list pane: the manager.
+                p.drawRoundedRect(QRectF(-7, -5.5, 14, 11), 2, 2);
+                p.drawLine(QPointF(-2, -5.5), QPointF(-2, 5.5));
+                p.drawLine(QPointF(-5, -2.5), QPointF(-4, -2.5));
+                p.drawLine(QPointF(-5, 0.5), QPointF(-4, 0.5));
+            } else {
+
+                QPolygonF gear;
+                for (int tooth = 0; tooth < 8; ++tooth) {
+                    const qreal middle = tooth * M_PI / 4;
+                    const QPair<qreal, qreal> corners[] = {{-.30, 5.1}, {-.17, 7}, {.17, 7}, {.30, 5.1}};
+                    for (auto corner : corners)
+                        gear << QPointF(qCos(middle + corner.first), qSin(middle + corner.first)) * corner.second;
+                }
+                p.setPen(QPen(ink, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                p.drawPolygon(gear);
+                p.drawEllipse(QPointF(), 2.3, 2.3);
+            }
+            return;
+        }
         if (glyph == Glyph::Plus) {
             p.drawLine(c + QPointF(-5 * unit, 0), c + QPointF(5 * unit, 0));
             p.drawLine(c + QPointF(0, -5 * unit), c + QPointF(0, 5 * unit));
+        } else if (glyph == Glyph::Down) {
+            // Checked, it points back up: the strip then collapses what it expanded.
+            const qreal rise = isChecked() ? -2.5 * unit : 2.5 * unit;
+            const QPointF chevron[] = {c + QPointF(-5 * unit, -rise), c + QPointF(0, rise),
+                                       c + QPointF(5 * unit, -rise)};
+            p.drawPolyline(chevron, 3);
         } else {
             const qreal side = glyph == Glyph::Left ? -2.5 * unit : 2.5 * unit;
             const QPointF chevron[] = {c + QPointF(-side, -5 * unit), c + QPointF(side, 0),
@@ -58,7 +113,10 @@ QIcon drawnIcon(const std::function<void(QPainter &)> &draw) {
     p.scale(theme::textScale, theme::textScale);
     p.setPen(QPen(theme::color("ink-muted"), 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     draw(p);
-    return QIcon(pixmap);
+    QIcon icon(pixmap);
+    // Qt tints a selected row's icon, which would change a category's colour.
+    icon.addPixmap(pixmap, QIcon::Selected);
+    return icon;
 }
 // A button inside a line edit, drawn on a 16-unit grid scaled by the Windows text size.
 class FieldButton : public QAbstractButton {
@@ -167,6 +225,10 @@ QLabel *heading(const QString &s, const QString &name) {
 QPushButton *glyphButton(Glyph glyph, const QString &label, const QString &name) {
     return new GlyphButton(glyph, label, name);
 }
+void setGlyph(QPushButton *button, Glyph glyph, const QString &label) {
+    if (auto target = dynamic_cast<GlyphButton *>(button))
+        target->set(glyph, label);
+}
 
 QIcon typeDot(const QString &color) {
     return drawnIcon([&](QPainter &p) {
@@ -184,6 +246,8 @@ QWidget *quickBar(const QString &placeholder, const std::function<bool(QString)>
     h->setSpacing(6);
     auto input = new SmartEntry;
     input->setPlaceholderText(placeholder);
+    // Qt 5.15 shows a plain text edit's placeholder only after a text change.
+    input->clear();
     input->onSubmit(add);
     input->setAccessibleName(placeholder);
     auto b = new GlyphButton(Glyph::Plus, "添加事项", "quickAdd");
@@ -219,6 +283,8 @@ void attachDatePicker(QLineEdit *edit, std::function<void()> onDateSelected) {
         auto layout = new QVBoxLayout(popup);
         layout->setContentsMargins(8, 8, 8, 8);
         auto calendar = new Calendar;
+        // The header grows with the text size, so the grid does too.
+        calendar->setMinimumSize(calendar->minimumSize() * theme::textScale);
         layout->addWidget(calendar);
         const QDate current = QDate::fromString(edit->text().trimmed(), Qt::ISODate);
         calendar->setSelectedDate(current.isValid() ? current : QDate::currentDate());

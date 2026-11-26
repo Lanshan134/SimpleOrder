@@ -4,6 +4,12 @@
 #include "ui/widgets/widgettools.h"
 #include <algorithm>
 
+namespace {
+// Unscaled widths: the least the page content is squeezed to, and the window the calendar reads well in.
+constexpr int MIN_CONTENT_WIDTH = 200;
+constexpr qreal FULL_CONTENT_WINDOW_WIDTH = 280;
+} // namespace
+
 void Controller::buildFloating() {
     floating = new Window(Qt::Window | Qt::WindowCloseButtonHint | Qt::WindowMinimizeButtonHint |
                           Qt::WindowTitleHint);
@@ -28,14 +34,15 @@ void Controller::buildFloating() {
     floatDate->setObjectName("floatingDate");
     head->addWidget(floatDate);
     head->addStretch();
-    switchButton = button("日历");
-    auto manage = button("管理");
-    manage->setObjectName("openManager");
-    manage->setToolTip("打开完整管理窗口");
-    auto config = button("设置");
-    head->addWidget(switchButton);
-    head->addWidget(manage);
-    head->addWidget(config);
+    // Icons with tooltips keep the title bar short, so most of it stays free for dragging.
+    switchButton = glyphButton(Glyph::Calendar, "切换到日历", "floatingSwitch");
+    auto manage = glyphButton(Glyph::Manager, "打开管理窗口", "openManager");
+    auto config = glyphButton(Glyph::Settings, "设置", "floatingSettings");
+    auto icons = new QHBoxLayout;
+    icons->setSpacing(2);
+    head->addLayout(icons);
+    for (auto b : {switchButton, manage, config})
+        icons->addWidget(b);
     outer->addWidget(titleBar);
     floating->setDragHandle(titleBar);
     stack = new QStackedWidget;
@@ -101,12 +108,13 @@ void Controller::buildFloating() {
     calendarLayout->setSpacing(6);
     calendarLayout->setSizeConstraint(QLayout::SetMinAndMaxSize);
     floatCal = new Calendar;
+    floatCal->wheelChangesMonth = false;
     calendarLayout->addWidget(floatCal, 1);
     floatDay = new TaskList;
+    floatDay->setObjectName("floatingDay");
     floatDay->setAccessibleName("选中日期的事项");
     floatDay->setProperty("dayList", true);
     floatDay->setProperty("emptyText", "这一天没有事项");
-    floatDay->setFixedHeight(4 * ROW_HEIGHT);
     bindList(floatDay);
     calendarLayout->addWidget(floatDay);
     // The stack may be shorter than the calendar's minimum plus its day list.
@@ -116,6 +124,7 @@ void Controller::buildFloating() {
     calendarScroll->setObjectName("floatingCalendarScroll");
     calendarScroll->setFrameShape(QFrame::NoFrame);
     calendarScroll->setWidgetResizable(true);
+    calendarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     calendarScroll->setWidget(calendarContent);
     cv->addWidget(calendarScroll, 1);
     cv->addWidget(quickBar("添加到选中日期", [this](QString t) {
@@ -129,7 +138,7 @@ void Controller::buildFloating() {
         calendarView = !calendarView;
         stack->setCurrentIndex(calendarView ? 1 : 0);
         label->setText(calendarView ? "日历" : "任务");
-        switchButton->setText(calendarView ? "列表" : "日历");
+        setGlyph(switchButton, calendarView ? Glyph::List : Glyph::Calendar, calendarView ? "返回任务列表" : "切换到日历");
     });
     connect(manage, &QPushButton::clicked, this, [this] {
         manager->show();
@@ -177,11 +186,14 @@ void Controller::scaleFloating(bool force) {
     // The area-derived factor responds to either resize axis and applies uniformly
     // to text and geometry. Always scale from the original metrics, never cumulatively.
     // Windows text size enlarges the default window, so with window scaling the size carries it.
+    // A tall, narrow window stops growing its text where the calendar would no longer fit its width.
     const qreal font = settings.value("fontSize", 15).toDouble() / 15.0;
     const qreal factor =
         qBound(0.7,
                settings.value("scaleWithWindow", true).toBool()
-                   ? font * qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0))
+                   ? qMin(font * qSqrt(qreal(floating->width()) * floating->height() /
+                                         (420.0 * 480.0 * (floatCal->expanded ? 1.5 : 1.0))),
+                          floating->width() / FULL_CONTENT_WINDOW_WIDTH)
                    : font * theme::textScale,
                3.0);
     if (!force && qAbs(factor - floatingScale) < 0.005)
@@ -201,14 +213,20 @@ void Controller::scaleFloating(bool force) {
         offset = match.capturedEnd();
     }
     style += floatingBaseStyle.mid(offset);
-    const auto recolor = [&](QString text, const QRegularExpression &pattern, qreal alpha) {
+    // Menus opened from the window inherit this sheet but are windows of their own: they keep opaque colours.
+    QString menus = QString("QMenu{color:%1;}").arg(theme::color("ink").name());
+    for (const auto &rule : style.split('\n'))
+        if (rule.startsWith("QMenu"))
+            menus += rule;
+    // Each pass maps a colour to its light-text counterpart before applying that pass's opacity.
+    const auto recolor = [&](QString text, const QRegularExpression &pattern, qreal alpha, const char *key) {
         QString out;
         int position = 0;
         auto matches = pattern.globalMatch(text);
         while (matches.hasNext()) {
             auto match = matches.next();
             out += text.mid(position, match.capturedStart() - position);
-            QColor color(match.captured(2));
+            const QColor color = floatingTone(floating, QColor(match.captured(2)), key);
             out += match.captured(1) + QString("rgba(%1,%2,%3,%4)")
                                            .arg(color.red())
                                            .arg(color.green())
@@ -218,20 +236,24 @@ void Controller::scaleFloating(bool force) {
         }
         return out + text.mid(position);
     };
-    style = recolor(
-        style, QRegularExpression("((?:background|background-color)\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
-        floating->backgroundOpacity);
-    style = recolor(
-        style, QRegularExpression("(?<![a-zA-Z-])((?:selection-)?color\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
-        floating->property("foregroundOpacity").isValid() ? floating->property("foregroundOpacity").toDouble()
-                                                          : 1.0);
-    // Control borders fade with the text. Quick add is the window's main action: its fill ignores the
-    // see-through background and stops fading at 70%, so it never reads as disabled.
     const qreal textAlpha = floating->property("foregroundOpacity").isValid()
                                 ? floating->property("foregroundOpacity").toDouble()
                                 : 1.0;
+    // Scrollbar handles are controls: like quick add they stay visible however see-through the background is.
+    style = recolor(style, QRegularExpression("(::handle:vertical[^{}]*\\{[^{}]*background\\s*:\\s*)(#[a-fA-F0-9]{6})\\b"),
+                    qMax(textAlpha, 0.7), "foregroundOpacity");
+    style = recolor(
+        style, QRegularExpression("((?:background|background-color)\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
+        floating->backgroundOpacity, "surfaceOpacity");
+    style = recolor(
+        style, QRegularExpression("(?<![a-zA-Z-])((?:selection-)?color\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
+        floating->property("foregroundOpacity").isValid() ? floating->property("foregroundOpacity").toDouble()
+                                                          : 1.0,
+        "foregroundOpacity");
+    // Control borders fade with the text. Quick add is the window's main action: its fill ignores the
+    // see-through background and stops fading at 70%, so it never reads as disabled.
     style = recolor(style, QRegularExpression("(border(?:-[a-z]+)?\\s*:\\s*[^;{}#]*)(#[a-fA-F0-9]{6})\\b"),
-                    textAlpha);
+                    textAlpha, "foregroundOpacity");
     const auto fill = [textAlpha](const char *token) {
         const QColor color = theme::color(token);
         return QString("rgba(%1,%2,%3,%4)")
@@ -243,6 +265,7 @@ void Controller::scaleFloating(bool force) {
     style += QString("QPushButton#quickAdd{background:%1;}QPushButton#quickAdd:hover{background:%2;}"
                      "QPushButton#quickAdd:disabled{background:%3;}")
                  .arg(fill("accent"), fill("accent-hover"), fill("control-off"));
+    style += menus;
     floating->setStyleSheet(style);
     // Polishing resets each input's palette, so the placeholder's opacity goes on afterwards.
     for (auto input : floating->findChildren<QLineEdit *>()) {
@@ -267,18 +290,18 @@ void Controller::scaleFloating(bool force) {
     tasks->setMinimumHeight(row);
     tasks->setProperty("preferredRows", settings.value("taskRows", 5).toInt());
     tasks->updateGeometry();
-    floatDay->setFixedHeight(4 * row);
+    fitDayList();
     for (auto list : {pins, plans})
         list->setFixedHeight(qMax(1, qMin(6, list->count())) * row);
     for (auto list : {pins, tasks, plans, floatDay}) {
         const int position = list->verticalScrollBar()->value();
-        list->setMinimumWidth(px(260));
+        list->setMinimumWidth(px(MIN_CONTENT_WIDTH));
         list->verticalScrollBar()->setSingleStep(row);
         list->doItemsLayout();
         list->verticalScrollBar()->setValue(qRound(position * factor / previous));
         list->viewport()->update();
     }
-    floatCal->setMinimumSize(px(330), px(250));
+    floatCal->setMinimumSize(px(MIN_CONTENT_WIDTH), px(floatCal->expanded ? 440 : 250));
     floatCal->repaintCells();
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setFixedSize(px(16), px(16));
@@ -286,14 +309,22 @@ void Controller::scaleFloating(bool force) {
     floating->update();
     scalingFloating = false;
 }
+// The day list is as tall as its items, from one row (also its empty state) to four; more of them scroll.
+void Controller::fitDayList() {
+    floatDay->setFixedHeight(qBound(1, floatDay->count(), 4) * scaled(floating, ROW_HEIGHT));
+}
 void Controller::applyFloatingAppearance() {
     bool visible = floating->isVisible();
     floating->setWindowFlag(Qt::FramelessWindowHint, settings.value("frameless", true).toBool());
     floating->setWindowOpacity(1.0);
+    floating->setProperty("lightText", settings.value("floatingText", "dark") == "light");
     floating->backgroundOpacity = qBound(0, settings.value("opacity", 100).toInt(), 100) / 100.0;
     floating->setProperty("surfaceOpacity", floating->backgroundOpacity);
     floating->setProperty("foregroundOpacity",
                           qBound(MIN_TEXT_OPACITY, settings.value("textOpacity", 100).toInt(), 100) / 100.0);
+    // The halo, and secondary text at full ink, only while the desktop shows through.
+    const bool halo = settings.value("floatingHalo", true).toBool() && floating->backgroundOpacity < HALO_BELOW;
+    floating->setProperty("strongInk", halo);
     // Only weekends carry a format, as on the manager calendar, so weekday headers keep the muted header ink.
     for (int weekday = 6; weekday <= 7; ++weekday) {
         QTextCharFormat format;
@@ -310,6 +341,8 @@ void Controller::applyFloatingAppearance() {
     }
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setVisible(settings.value("frameless", true).toBool());
+    for (auto area : {floating->findChild<QLabel *>("windowTitle")->parentWidget(), static_cast<QWidget *>(stack)})
+        area->setGraphicsEffect(halo ? haloEffect(floating, area) : nullptr);
     if (visible)
         floating->show();
     scaleFloating(true);

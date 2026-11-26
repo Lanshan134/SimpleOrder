@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <title>SimpleOrder B 16px</title>
+  <rect x="0" y="0" width="16" height="16" rx="3.5" fill="#2563eb"/>
+  <path d="M5 4 A2 2 0 0 0 5 8 M11 8 A2 2 0 0 1 11 12" fill="none" stroke="#bdd2fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M5 4 H12 M5 8 H11 M4 12 H11" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

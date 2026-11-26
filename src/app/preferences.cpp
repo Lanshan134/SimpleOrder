@@ -47,10 +47,14 @@ void Controller::applyPreferences() {
         calendar->showCompleted = settings.value("showCompleted", true).toBool() &&
                                   settings.value("calendarCompleted", true).toBool();
         calendar->retentionHours = settings.value("retentionHours", 48).toInt();
-        calendar->repaintCells();
     }
     items = store.all();
+    for (auto &i : items)
+        i = planState(i, QDate::currentDate());
     updateLists();
+    cal->items = floatCal->items = sortedItems(items);
+    cal->repaintCells();
+    floatCal->repaintCells();
     if (!dirty && !selected)
         fillEditor();
     settings.sync();

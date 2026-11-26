@@ -293,13 +293,14 @@ bool Controller::smokeTest(const QString &dir) {
     auto table = cal->findChild<QAbstractItemView *>();
     auto idx = table->model()->index(2, 3);
     QPoint pt = table->viewport()->mapTo(cal, table->visualRect(idx).center());
+    // A task: count plans such as the one above have no single date to move.
     QMimeData mime;
-    mime.setData("application/x-lighttask-id", QByteArray::number(id));
+    mime.setData("application/x-lighttask-id", QByteArray::number(detailId));
     QDragEnterEvent enter(pt, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(cal, &enter);
     QDropEvent drop(QPointF(pt), Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(cal, &drop);
-    require(drop.isAccepted() && QDate::fromString(get(id).date, Qt::ISODate).day() == idx.data().toInt(),
+    require(drop.isAccepted() && QDate::fromString(get(detailId).date, Qt::ISODate).day() == idx.data().toInt(),
             "drop target date");
     store.saveCategory({"backup_type", "备份类型", "#f08080"});
     reloadCategories();
@@ -472,9 +473,16 @@ bool Controller::smokeTest(const QString &dir) {
     editorSmokeTest(dir);
     draftSmokeTest(dir);
     calendarEditorSmokeTest();
+    dateLabelSmokeTest(dir);
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
+    categoryTagSmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
+    interactionSmokeTest(dir);
+    floatingSmokeTest(dir);
+    scrollbarSmokeTest(dir);
+    editorLayoutSmokeTest(dir);
+    calendarSmokeTest(dir);
 
     return true;
 }
@@ -802,6 +810,8 @@ void Controller::draftSmokeTest(const QString &dir) {
     choose(otherId);
     require(selected == otherId, "unchanged form switches without prompt");
     settings.setValue("frameless", true);
+    // These checks measure the faded colours themselves, without the legibility halo.
+    settings.setValue("floatingHalo", false);
     settings.setValue("opacity", 20);
     settings.setValue("textOpacity", 100);
     applyFloatingAppearance();
@@ -845,7 +855,7 @@ void Controller::draftSmokeTest(const QString &dir) {
             strongest = qMax(strongest, faded.pixelColor(x, y).alpha());
     // 45% text over a 20% background composites to about 143, or up to about 170 with text smoothing;
     // an unfaded placeholder reads 255.
-    require(strongest <= 190, "rendered placeholder follows text opacity");
+    require(strongest >= 120 && strongest <= 190, "rendered placeholder shows and follows text opacity");
     calendarView = true;
     stack->setCurrentIndex(1);
     settings.setValue("opacity", 100);
@@ -853,11 +863,12 @@ void Controller::draftSmokeTest(const QString &dir) {
     applyFloatingAppearance();
     const auto monthTitle = [](QDate d) { return QString("%1 年 %2 月").arg(d.year()).arg(d.month()); };
     setDate(QDate::currentDate().addMonths(2));
-    require(floatCal->titleButton->text() == monthTitle(QDate::currentDate().addMonths(2)) &&
-                cal->titleButton->text() == floatCal->titleButton->text() && floatCal->todayButton->isEnabled(),
+    const auto shownTitle = [](Calendar *c) { return c->yearButton->text() + " " + c->monthButton->text(); };
+    require(shownTitle(floatCal) == monthTitle(QDate::currentDate().addMonths(2)) &&
+                shownTitle(cal) == shownTitle(floatCal) && floatCal->todayButton->isEnabled(),
             "month title follows the selected date");
     setDate(QDate::currentDate());
-    require(floatCal->titleButton->text() == monthTitle(QDate::currentDate()) && !floatCal->todayButton->isEnabled(),
+    require(shownTitle(floatCal) == monthTitle(QDate::currentDate()) && !floatCal->todayButton->isEnabled(),
             "today control rests when today is showing");
     for (int pass = 0; pass < 3; ++pass)
         QApplication::processEvents();
@@ -894,6 +905,7 @@ void Controller::draftSmokeTest(const QString &dir) {
     settingsWindow->reject();
     settings.setValue("opacity", 100);
     settings.setValue("textOpacity", 100);
+    settings.remove("floatingHalo");
     applyFloatingAppearance();
     dirty = false;
 }
@@ -1042,6 +1054,124 @@ void Controller::calendarEditorSmokeTest() {
     require(!selected && !hasEditorChanges(), "clean existing view switches without any confirmation");
 }
 
+void Controller::dateLabelSmokeTest(const QString &directory) {
+    auto check = [](bool ok, const char *name) {
+        if (!ok)
+            throw std::runtime_error(name);
+    };
+    const QDate fixed(2026, 12, 31);
+    auto marker = [&](const QDate &date, const QString &word, int expected) {
+        int urgency = -1;
+        return dateMarker(date.toString(Qt::ISODate), fixed, &urgency) == word && urgency == expected;
+    };
+    check(marker(fixed, "今天", 1) && marker(fixed.addDays(1), "明天", 3) && marker(fixed.addDays(-1), "昨天", 2) &&
+              marker(fixed.addDays(2), "2027-01-02", 0) && marker(fixed.addDays(-2), "12-29", 2),
+          "relative words and colours per day");
+    check(marker(QDate(2026, 11, 30), "11-30", 2) && marker(QDate(2025, 12, 31), "2025-12-31", 2),
+          "other days keep their digits");
+    // The same row read a day later, as after midnight.
+    int urgency = -1;
+    check(dateMarker("2027-01-01", fixed.addDays(1), &urgency) == "今天" && urgency == 1,
+          "tomorrow becomes today when the day changes");
+
+    auto luminance = [](const QColor &c) {
+        auto linear = [](qreal v) { return v <= .03928 ? v / 12.92 : qPow((v + .055) / 1.055, 2.4); };
+        return .2126 * linear(c.redF()) + .7152 * linear(c.greenF()) + .0722 * linear(c.blueF());
+    };
+    for (auto ink : {"ink-muted", "accent-ink", "danger", "tomorrow"})
+        for (auto back : {"surface", "canvas", "row-hover", "selection"})
+            check((luminance(theme::color(back)) + .05) / (luminance(theme::color(ink)) + .05) >= 4.5,
+                  "date colours stay readable on every row background");
+    // The floating window's light text maps both sides; tomorrow's colour included (#2, #7).
+    QWidget lightText;
+    lightText.setProperty("lightText", true);
+    for (auto ink : {"ink", "ink-muted", "accent-ink", "danger", "tomorrow"})
+        for (auto back : {"surface", "canvas", "row-hover", "selection"}) {
+            const qreal front = luminance(floatingTone(&lightText, theme::color(ink), "foregroundOpacity")),
+                        under = luminance(floatingTone(&lightText, theme::color(back), "surfaceOpacity"));
+            check(under < front && (front + .05) / (under + .05) >= 4.5,
+                  qPrintable(QString("light %1 stays readable on %2").arg(ink, back)));
+        }
+
+    auto paint = [&](int urgencyValue, bool isDone) {
+        QStandardItemModel model(1, 1);
+        auto index = model.index(0, 0);
+        model.setData(index, 42, Qt::UserRole);
+        model.setData(index, QColor("#6b97c6"), Qt::UserRole + 1);
+        model.setData(index, isDone, Qt::UserRole + 3);
+        model.setData(index, "明天 15:00", Qt::UserRole + 4);
+        model.setData(index, urgencyValue, Qt::UserRole + 6);
+        QImage image(300, 30, QImage::Format_ARGB32);
+        image.fill(Qt::white);
+        QStyleOptionViewItem option;
+        option.rect = QRect(0, 0, 300, 30);
+        option.widget = all;
+        option.font = all->font();
+        QPainter painter(&image);
+        all->itemDelegate()->paint(&painter, option, index);
+        painter.end();
+        return image;
+    };
+    check(paint(3, false) != paint(0, false) && paint(3, false) != paint(1, false) && paint(3, false) != paint(2, false),
+          "tomorrow has a colour of its own");
+    check(paint(3, true) == paint(0, true), "done rows keep the muted date");
+
+    const QDate today = QDate::currentDate();
+    QList<qint64> ids;
+    for (int offset : {-1, 0, 1, 2}) {
+        Item item;
+        item.title = QString("日期标签 %1").arg(offset);
+        item.date = today.addDays(offset).toString(Qt::ISODate);
+        item.time = "15:00";
+        ids << store.save(item).id;
+    }
+    selected = 0;
+    dirty = false;
+    refresh();
+    for (auto list : {tasks, all}) {
+        int seen = 0;
+        for (int n = 0; n < list->count(); ++n) {
+            auto row = list->item(n);
+            const int at = ids.indexOf(row->data(Qt::UserRole).toLongLong());
+            if (at < 0)
+                continue;
+            ++seen;
+            const QString iso = today.addDays(at - 1).toString(Qt::ISODate);
+            check(row->toolTip().contains(iso + " 15:00") &&
+                      row->data(Qt::AccessibleTextRole).toString().contains(iso + " 15:00"),
+                  "hover and accessible text give the full date");
+            if (at < 3)
+                check(row->data(Qt::UserRole + 4).toString() == QStringList{"昨天", "今天", "明天"}[at] + " 15:00",
+                      "relative date keeps the time");
+            check(row->data(Qt::UserRole + 6).toInt() == QList<int>{2, 1, 3, 0}[at], "row urgency");
+        }
+        check(seen == 4, "dated rows listed");
+    }
+    floating->grab().save(directory + "/date-labels-floating.png");
+    manager->grab().save(directory + "/date-labels-manager.png");
+    for (int offset : {-1, 0, 1, 2}) {
+        setDate(today.addDays(offset));
+        const QString word = offset < 2 ? QStringList{"昨天", "今天", "明天"}[offset + 1] + " · " : QString();
+        check(dateLabel->text().startsWith(word + QLocale().toString(today.addDays(offset), "M月d日 ddd")),
+              "day heading uses the same words");
+    }
+    for (auto id : ids)
+        store.remove(id);
+    selected = 0;
+    setDate(today);
+    refresh();
+
+    auto quick = manager->findChild<SmartEntry *>();
+    quick->setPlainText("买菜 明天");
+    const QString fresh = quick->toolTip();
+    quick->setToolTip("昨日结果");
+    QFocusEvent focus(QEvent::FocusIn);
+    QApplication::sendEvent(quick, &focus);
+    check(fresh.contains(today.addDays(1).toString(Qt::ISODate)) && quick->toolTip() == fresh,
+          "returning to quick entry resolves its dates again");
+    quick->clear();
+}
+
 void Controller::smartEntrySmokeTest(const QString &directory) {
     auto check = [](bool ok, const char *name) {
         if (!ok)
@@ -1180,6 +1310,289 @@ void Controller::smartEntrySmokeTest(const QString &directory) {
     fillEditor();
 }
 
+void Controller::categoryTagSmokeTest(const QString &directory) {
+    auto check = [](bool ok, const QString &name) {
+        if (!ok)
+            throw std::runtime_error(name.toStdString());
+    };
+    auto get = [&] {
+        for (auto i : store.all())
+            if (i.id == selected)
+                return i;
+        return Item{};
+    };
+    auto press = [](QWidget *input, int key) {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+        QApplication::sendEvent(input, &event);
+    };
+    auto write = [](QWidget *input, const QString &text) {
+        for (auto ch : text) {
+            QKeyEvent event(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier, ch);
+            QApplication::sendEvent(input, &event);
+        }
+    };
+    // The open suggestions of an input's window, or nothing.
+    auto popup = [](QWidget *input) -> QListWidget * {
+        for (auto list : input->window()->findChildren<QListWidget *>("categoryPopup"))
+            if (list->isVisible())
+                return list;
+        return nullptr;
+    };
+    auto names = [&](QWidget *input) {
+        QStringList out;
+        if (auto list = popup(input))
+            for (int n = 0; n < list->count(); ++n)
+                out << list->item(n)->text();
+        return out;
+    };
+    auto click = [](QListWidget *list, int row) {
+        const QPoint at = list->visualItemRect(list->item(row)).center();
+        for (auto kind : {QEvent::MouseButtonPress, QEvent::MouseButtonRelease}) {
+            QMouseEvent event(kind, at, list->viewport()->mapToGlobal(at), Qt::LeftButton,
+                              kind == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(list->viewport(), &event);
+        }
+    };
+    auto reset = [&] {
+        dirty = false;
+        selected = 0;
+        fillEditor();
+    };
+    store.saveCategory({"tag-room", "工作室", "#6bc6a1"});
+    store.saveCategory({"tag-work", "工作", "#c66b6b"});
+    store.saveCategory({"tag-space", "学习 进阶", "#6b97c6"});
+    store.saveCategory({"tag-base", "学习", "#a68ac5"});
+    reloadCategories();
+    reset();
+    const QString fallback = settings.value("defaultType", "other").toString();
+    const bool calendarPage = stack->currentIndex() == 1;
+    manager->show();
+    floating->show();
+    closeEditor();
+    for (auto input : manager->findChildren<SmartEntry *>() + floating->findChildren<SmartEntry *>()) {
+        if (input->window() == floating) {
+            stack->setCurrentIndex(input->placeholderText() == "添加到选中日期" ? 1 : 0);
+            QApplication::processEvents();
+        }
+        const QString where = input->placeholderText() + "/" + input->window()->objectName() + ": ";
+        QApplication::setActiveWindow(input->window());
+        input->setFocus();
+        input->clear();
+        write(input, "开会 #");
+        check(names(input).size() == store.categories().size() && popup(input)->currentRow() < 0,
+              where + "hash lists every category without choosing one");
+        write(input, "工");
+        check(names(input) == QStringList({"工作室", "工作"}) && popup(input)->currentRow() == 0,
+              where + "typing filters the categories");
+        check(input->window()->rect().contains(popup(input)->geometry()) &&
+                  !popup(input)->geometry().intersects(QRect(input->mapTo(input->window(), QPoint()), input->size())),
+              where + "suggestions fit the window and leave the input clear");
+        press(input, Qt::Key_Down);
+        press(input, Qt::Key_Down);
+        check(popup(input)->currentRow() == 1, where + "down stops at the last suggestion");
+        press(input, Qt::Key_Up);
+        press(input, Qt::Key_Down);
+        const auto before = store.all().size();
+        press(input, Qt::Key_Return);
+        check(store.all().size() == before && input->toPlainText() == "开会 #工作 " && !popup(input) &&
+                  input->extraSelections().size() == 1 && input->toolTip() == "工作",
+              where + "Enter takes the suggestion without submitting");
+        press(input, Qt::Key_Return);
+        check(store.all().size() == before + 1 && get().title == "开会" && get().group == "tag-work" &&
+                  input->toPlainText().isEmpty(),
+              where + "the saved task is in the chosen category");
+        write(input, "布展 #工");
+        press(input, Qt::Key_Tab);
+        check(input->toPlainText() == "布展 #工作室 " && input->hasFocus(), where + "Tab takes the suggestion");
+        input->undo();
+        check(!input->toPlainText().contains("工作室"), where + "a suggestion can be undone");
+        input->clear();
+        write(input, "布展 #工");
+        click(popup(input), 1);
+        check(input->toPlainText() == "布展 #工作 " && input->hasFocus() && !popup(input),
+              where + "a click takes the suggestion and leaves the focus");
+        input->clear();
+    }
+    stack->setCurrentIndex(calendarPage ? 1 : 0);
+
+    auto quick = manager->findChild<SmartEntry *>();
+    QApplication::setActiveWindow(manager);
+    quick->setFocus();
+    write(quick, "报修 #工");
+    press(quick, Qt::Key_Escape);
+    write(quick, "作");
+    check(!popup(quick) && quick->toPlainText() == "报修 #工作", "Esc keeps the suggestions closed for this tag");
+    write(quick, "单");
+    press(quick, Qt::Key_Return);
+    check(get().title == "报修 #工作单" && get().group == fallback, "unmatched tag stays in the name");
+    write(quick, "整理 #");
+    press(quick, Qt::Key_Return);
+    check(get().title == "整理 #", "Enter on a bare hash submits");
+    write(quick, "开会 #工作");
+    check(names(quick) == QStringList({"工作", "工作室"}), "an exact name is listed first");
+    press(quick, Qt::Key_Return);
+    check(get().title == "开会" && get().group == "tag-work", "a typed full name needs one Enter");
+    write(quick, "读书 #学习 进");
+    check(names(quick) == QStringList{"学习 进阶"} && popup(quick)->currentRow() < 0, "names with spaces are offered");
+    press(quick, Qt::Key_Down);
+    press(quick, Qt::Key_Return);
+    press(quick, Qt::Key_Return);
+    check(get().title == "读书" && get().group == "tag-space", "names with spaces can be chosen");
+    write(quick, "读书 #学习 ");
+    check(!popup(quick), "a finished tag needs no further suggestion");
+    press(quick, Qt::Key_Return);
+    check(get().group == "tag-base", "prefix of a longer category name");
+    write(quick, "C#");
+    check(!popup(quick), "no suggestions inside a word");
+    quick->clear();
+
+    const auto before = store.all().size();
+    write(quick, "输入法 #工");
+    QInputMethodEvent preedit("zuo", {});
+    QApplication::sendEvent(quick, &preedit);
+    press(quick, Qt::Key_Return);
+    check(store.all().size() == before && quick->toPlainText() == "输入法 #工", "IME Enter takes no suggestion");
+    QInputMethodEvent committed;
+    committed.setCommitString("作室");
+    QApplication::sendEvent(quick, &committed);
+    check(names(quick) == QStringList{"工作室"}, "committed IME text filters");
+    QFocusEvent left(QEvent::FocusOut);
+    QApplication::sendEvent(quick, &left);
+    check(!popup(quick), "leaving the input closes the suggestions");
+    quick->setPlainText(QString(996, 'x') + " #");
+    quick->moveCursor(QTextCursor::End);
+    write(quick, "工");
+    press(quick, Qt::Key_Tab);
+    check(quick->toPlainText().size() == 999, "a suggestion cannot exceed the length limit");
+    quick->clear();
+
+    store.saveCategory({"tag-work", "工厂", "#c66b6b"});
+    reloadCategories();
+    write(quick, "巡检 #工厂");
+    check(names(quick) == QStringList{"工厂"}, "renamed category is offered");
+    press(quick, Qt::Key_Return);
+    check(get().group == "tag-work", "renamed category is used");
+    store.saveCategory({"tag-work", "工作", "#c66b6b"});
+    reloadCategories();
+    write(quick, "开会 #工");
+    manager->grab().save(directory + "/category-popup-manager.png");
+    quick->clear();
+    // A suggestion that would pass the 1000-character limit says why it is not taken.
+    QToolTip::hideText();
+    quick->setPlainText(QString(995, QChar('x')));
+    quick->moveCursor(QTextCursor::End);
+    write(quick, " #工");
+    check(names(quick).size() == 2, "suggestions open near the length limit");
+    press(quick, Qt::Key_Return);
+    check(quick->toPlainText().endsWith(" #工") && QToolTip::text() == "最多输入 1000 个字符",
+          "a suggestion past the length limit explains why it is not taken");
+    QToolTip::hideText();
+    quick->clear();
+
+    // The list must stay readable over a see-through floating window.
+    const auto opacity = settings.value("opacity", 100), textOpacity = settings.value("textOpacity", 100);
+    settings.setValue("opacity", 0);
+    settings.setValue("textOpacity", 40);
+    applyFloatingAppearance();
+    stack->setCurrentIndex(0);
+    floating->resize(390, 340);
+    QApplication::processEvents();
+    SmartEntry *small = nullptr;
+    for (auto input : floating->findChildren<SmartEntry *>())
+        if (input->isVisible())
+            small = input;
+    write(small, "开会 #");
+    QApplication::processEvents();
+    const auto shot = floating->grab().toImage();
+    const QRect inside = popup(small)->geometry().adjusted(6, 6, -6, -6);
+    for (int y = inside.top(); y <= inside.bottom(); ++y)
+        for (int x = inside.left(); x <= inside.right(); ++x)
+            check(shot.pixelColor(x, y).alpha() == 255, "suggestions are opaque");
+    floating->grab().save(directory + "/category-popup-floating.png");
+    floating->resize(420, 480);
+    QApplication::processEvents();
+    check(!popup(small), "resizing the window closes the suggestions");
+    small->clear();
+    settings.setValue("opacity", opacity);
+    settings.setValue("textOpacity", textOpacity);
+    applyFloatingAppearance();
+    stack->setCurrentIndex(calendarPage ? 1 : 0);
+
+    // Editor: a suggestion fills the type field; a typed tag follows the conflict rules on Enter.
+    reset();
+    openEditor();
+    QApplication::setActiveWindow(manager);
+    title->setFocus();
+    write(title, "写周报 #工作");
+    manager->grab().save(directory + "/category-popup-editor.png");
+    check(names(title) == QStringList({"工作", "工作室"}) &&
+              popup(title)->y() >= title->mapTo(manager, QPoint(0, title->height())).y(),
+          "editor name offers categories below it");
+    const QImage dot = popup(title)->item(0)->icon().pixmap(16, 16, QIcon::Selected).toImage();
+    check(dot.pixelColor(dot.width() / 2, dot.height() / 2) == QColor("#c66b6b"), "a selected suggestion keeps its colour");
+    press(title, Qt::Key_Tab);
+    check(title->text().trimmed() == "写周报" && group->currentData() == "tag-work" && !popup(title) && !selected,
+          "editor suggestion fills the type field");
+    saveEditor();
+    check(get().title == "写周报" && get().group == "tag-work", "editor task saved in the chosen category");
+    title->setText("写周报 #学习");
+    press(title, Qt::Key_Return);
+    check(title->text() == "写周报 #学习" && group->currentData() == "tag-work" &&
+              !title->property("entryError").toString().isEmpty(),
+          "typed tag does not overwrite an existing task's type");
+    title->clear();
+    write(title, "写周报 #学");
+    press(title, Qt::Key_Return);
+    check(group->currentData() == "tag-base" || group->currentData() == "study", "a chosen suggestion does");
+    reset();
+    title->setText("计划 #学习 明天");
+    press(title, Qt::Key_Return);
+    check(title->text() == "计划" && group->currentData() == "tag-base" &&
+              date->text() == QDate::currentDate().addDays(1).toString(Qt::ISODate),
+          "typed tag fills a new task on Enter");
+    reset();
+    const int chosen = group->findData("tag-room");
+    group->setCurrentIndex(chosen);
+    emit group->activated(chosen);
+    title->setText("布展 #学习");
+    press(title, Qt::Key_Return);
+    check(title->text() == "布展 #学习" && group->currentData() == "tag-room", "typed tag keeps a type chosen by hand");
+    reset();
+    editorTabs->setCurrentIndex(1);
+    write(title, "计划 #工");
+    check(!popup(title), "plan names offer no categories");
+    reset();
+    closeEditor();
+
+    selected = 0;
+    check(add("对话框任务"), "dialog task created");
+    QTimer::singleShot(0, this, [&] {
+        if (!itemWindow)
+            return;
+        QApplication::setActiveWindow(itemWindow);
+        title->setFocus();
+        title->end(false);
+        write(title, " #工");
+        const bool opened = popup(title) && popup(title)->window() == itemWindow;
+        itemWindow->grab().save(directory + "/category-popup-dialog.png");
+        press(title, Qt::Key_Escape);
+        const bool stays = itemWindow && itemWindow->isVisible() && !popup(title);
+        itemWindow->close();
+        check(opened && stays, "Esc closes the suggestions before the dialog");
+    });
+    editFloatingItem(selected);
+    reset();
+    openEditor();
+    write(title, "再次 #工");
+    check(popup(title) && popup(title)->window() == manager, "suggestions return to the manager with the editor");
+    reset();
+    closeEditor();
+    for (auto id : {"tag-room", "tag-work", "tag-space", "tag-base"})
+        store.removeCategory(id, "other");
+    reloadCategories();
+    refresh();
+}
+
 void Controller::layoutSmokeTest(const QString &directory) {
     QStringList failures;
     auto check = [&](bool ok, const QString &label) {
@@ -1232,8 +1645,8 @@ void Controller::layoutSmokeTest(const QString &directory) {
                             check(floatCal->rect().contains(QRect(table->mapTo(floatCal, QPoint()),
                                                                  table->size())),
                                   "calendar last row remains in bounds: " + context);
-                        check(floatDay->height() == 4 * scaled(floating, ROW_HEIGHT),
-                              "redesigned day list keeps four visible rows: " + context);
+                        check(floatDay->height() == qBound(1, count, 4) * scaled(floating, ROW_HEIGHT),
+                              "day list uses its actual row count: " + context);
                     }
                     if (!scale && count == 1 && size == QSize(420, 900))
                         floating->grab().save(directory + QString("/layout-tall-%1.png").arg(mode));

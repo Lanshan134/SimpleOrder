@@ -39,6 +39,11 @@ class Controller : public QObject {
     void openEditor();
     void closeEditor();
     void scaleManager();
+    void expandCalendar(Calendar *, bool);
+    // How far expanding moved the floating window up to stay on screen, and its height before;
+    // collapsing restores both. They last for the session.
+    int floatingShift = 0, floatingCompactHeight = 0;
+    int fitFloating();
     QLineEdit *search = nullptr, *title = nullptr, *date = nullptr, *time = nullptr;
     QComboBox *group = nullptr, *type = nullptr, *timeKind = nullptr;
     QCheckBox *pinned = nullptr, *done = nullptr, *showCalendar = nullptr;
@@ -46,9 +51,11 @@ class Controller : public QObject {
     QPlainTextEdit *notes = nullptr;
     QTabBar *editorTabs = nullptr;
     QJsonObject editorBaseline;
-    bool dateManuallyEdited = false;
+    bool dateManuallyEdited = false, groupManuallyEdited = false;
     bool parseEditorTitle();
     void smartEntrySmokeTest(const QString &);
+    void categoryTagSmokeTest(const QString &);
+    void dateLabelSmokeTest(const QString &);
     bool dateFieldActive = false, calendarDateEditPending = false;
     int dateFocusGeneration = 0;
     bool eventFilter(QObject *, QEvent *) override;
@@ -75,6 +82,7 @@ class Controller : public QObject {
     QString floatingBaseStyle;
     void setupFloatingScaling();
     void scaleFloating(bool force = false);
+    void fitDayList();
     void buildManager();
     void fillEditor();
     void updateLists();
@@ -90,10 +98,15 @@ class Controller : public QObject {
     bool add(const QString &, QDate = {});
     void settingsDialog();
     void layoutSmokeTest(const QString &directory);
+    void floatingSmokeTest(const QString &directory);
+    void scrollbarSmokeTest(const QString &directory);
+    void editorLayoutSmokeTest(const QString &directory);
+    void calendarSmokeTest(const QString &directory);
     bool settingsSmokeTest(const QString &directory);
     void editorSmokeTest(const QString &directory);
     void draftSmokeTest(const QString &directory);
     void calendarEditorSmokeTest();
+    void interactionSmokeTest(const QString &directory);
     void applyPreferences();
     bool visibleItem(const Item &) const;
     QList<Item> sortedItems(QList<Item>) const;

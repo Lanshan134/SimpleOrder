@@ -19,3 +19,6 @@ bool planOccurs(const Item &, const QDate &);
 Item planState(Item, const QDate &);
 Item recordPlan(Item, const QDate &);
 void validatePlan(const Item &);
+// Tasks, interval plans, chosen-day plans and plans without a rule move on the calendar;
+// count and cumulative plans have no single date.
+bool reschedulable(const Item &);

@@ -1,0 +1,2 @@
+// The executable's icon for the CMake build; qmake writes its own from RC_ICONS.
+IDI_ICON1 ICON "app-icon.ico"

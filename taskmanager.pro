@@ -14,6 +14,7 @@ SOURCES += \
     src/storage/store.cpp \
     src/ui/theme/appearance.cpp \
     src/ui/widgets/calendar.cpp \
+    src/ui/widgets/categorypopup.cpp \
     src/ui/widgets/planeditor.cpp \
     src/ui/widgets/smartentry.cpp \
     src/ui/widgets/tasklist.cpp \
@@ -23,7 +24,10 @@ SOURCES += \
     src/ui/windows/manager.cpp \
     src/ui/windows/settings.cpp \
     src/ui/windows/window.cpp \
+    tests/calendar_smoke.cpp \
     tests/entryparser_tests.cpp \
+    tests/floating_smoke.cpp \
+    tests/interaction_smoke.cpp \
     tests/settings_smoke.cpp \
     tests/ui_smoke.cpp
 
@@ -35,6 +39,7 @@ HEADERS += \
     src/ui/theme/appearance.h \
     src/ui/theme/theme.h \
     src/ui/widgets/calendar.h \
+    src/ui/widgets/categorypopup.h \
     src/ui/widgets/editorwidgets.h \
     src/ui/widgets/planeditor.h \
     src/ui/widgets/smartentry.h \
@@ -44,6 +49,8 @@ HEADERS += \
     src/ui/windows/window.h
 
 RESOURCES += resources/theme.qrc
+# The executable's icon for Explorer, shortcuts and the taskbar; tools/make_icon.py regenerates it.
+RC_ICONS = resources/app-icon.ico
 
 # Debug our application against the installed release Qt libraries.
 win32-g++:contains(CONFIG, app_debug) {

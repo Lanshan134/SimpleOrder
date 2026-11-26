@@ -23,19 +23,49 @@ Calendar::Calendar(QWidget *parent) : QCalendarWidget(parent) {
     auto barLayout = new QHBoxLayout(bar);
     barLayout->setContentsMargins(0, 0, 0, 4);
     barLayout->setSpacing(2);
-    titleButton = button("", "calendarTitle");
-    titleButton->setToolTip("选择年份和月份");
+    yearButton = button("", "calendarTitle");
+    yearButton->setToolTip("选择年份");
+    monthButton = button("", "calendarTitle");
+    monthButton->setToolTip("选择月份");
+    for (bool years : {true, false}) {
+        auto owner = years ? yearButton : monthButton;
+        // Parented inside the window: scaleFloating keeps menus there opaque at any background opacity.
+        auto menu = new QMenu(owner);
+        owner->setMenu(menu);
+        // Each entry keeps the other part of the page: years keep the month, months keep the year.
+        connect(menu, &QMenu::aboutToShow, this, [this, menu, years] {
+            menu->clear();
+            const int shown = years ? yearShown() : monthShown();
+            for (int value = years ? qMax(1, shown - 6) : 1; value <= (years ? qMin(9999, shown + 6) : 12); ++value) {
+                auto action = menu->addAction(QString(years ? "%1 年" : "%1 月").arg(value), this, [this, value, years] {
+                    setCurrentPage(years ? value : yearShown(), years ? monthShown() : value);
+                });
+                action->setCheckable(true);
+                action->setChecked(value == shown);
+            }
+        });
+    }
+    // A strip under the grid that points the way the calendar grows; the date picker leaves it hidden.
+    expandButton = glyphButton(Glyph::Down, "展开日历", "calendarExpand");
+    expandButton->setCheckable(true);
+    expandButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    expandButton->hide();
+    // The weekday row takes only its text height, so tall cells all go to the dates.
+    if (auto grid = qobject_cast<QTableView *>(table))
+        grid->verticalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     todayButton = button("今天");
     auto previous = glyphButton(Glyph::Left, "上个月", "calendarArrow");
     auto next = glyphButton(Glyph::Right, "下个月", "calendarArrow");
-    barLayout->addWidget(titleButton);
+    barLayout->addWidget(yearButton);
+    barLayout->addWidget(monthButton);
     barLayout->addStretch();
     barLayout->addWidget(todayButton);
     barLayout->addWidget(previous);
     barLayout->addWidget(next);
-    if (auto column = qobject_cast<QVBoxLayout *>(layout()))
+    if (auto column = qobject_cast<QVBoxLayout *>(layout())) {
         column->insertWidget(0, bar);
-    connect(titleButton, &QPushButton::clicked, this, [this] { chooseMonth(); });
+        column->addWidget(expandButton);
+    }
     connect(todayButton, &QPushButton::clicked, this, [this] { setSelectedDate(QDate::currentDate()); });
     connect(previous, &QPushButton::clicked, this, &QCalendarWidget::showPreviousMonth);
     connect(next, &QPushButton::clicked, this, &QCalendarWidget::showNextMonth);
@@ -83,8 +113,14 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     const bool hasMarks = !items.isEmpty();
     const qreal radius =
         hasMarks ? qMin(metrics.capHeight() * .95, (r.height() - 11 * scale) / 2) : metrics.capHeight() * .95;
+    // Item rows fill the cell below the number; every cell counts the shortest row, so the grid looks alike.
+    const qreal line = 14 * scale, top = r.top() + 2 * radius + 6 * scale;
+    auto grid = qobject_cast<QTableView *>(table);
+    const int rows = expanded && grid ? int((grid->rowHeight(6) - 2 * radius - 6 * scale) / line) : 0;
     const QPointF numberCentre(r.center().x() + .5,
-                               hasMarks ? r.top() + qMax(radius + 3 * scale, r.height() * .38) : QRectF(r).center().y());
+                               rows > 1   ? r.top() + radius + 4 * scale
+                               : hasMarks ? r.top() + qMax(radius + 3 * scale, r.height() * .38)
+                                          : QRectF(r).center().y());
     if (isToday) {
         p->setPen(Qt::NoPen);
         p->setBrush(foregroundColor(this, theme::color("accent")));
@@ -101,16 +137,56 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     p->restore();
     const QRect area(qRound(r.x() / scale), qRound(r.y() / scale), qRound(r.width() / scale),
                      qRound(r.height() / scale));
-    QList<Item> hits;
-    for (const auto &stored : items) {
-        auto i = planState(stored, d);
-        if ((!i.done ||
-             (showCompleted && visibleInActive(i, QDateTime::currentDateTimeUtc(), retentionHours))) &&
-            planOccurs(i, d) && (i.type == "task" || i.showCalendar))
-            hits << i;
-    }
+    const QList<Item> hits = itemsOn(d);
     if (hits.isEmpty())
         return;
+    if (rows > 1) {
+        p->save();
+        QFont text = numberFont;
+        text.setPixelSize(qRound(11 * scale));
+        text.setWeight(QFont::Normal);
+        // Wide cells show times; narrow ones cut titles off rather than spend room on an ellipsis.
+        const bool wide = r.width() >= 100 * scale;
+        const int listed = hits.size() > rows ? rows - 1 : hits.size();
+        for (int n = 0; n <= listed && n < hits.size(); ++n) {
+            const QRectF row(r.left() + 3 * scale, top + n * line, r.width() - 5 * scale, line);
+            const QRectF words = row.adjusted(8 * scale, -scale, 0, scale);
+            const auto &i = hits[n];
+            text.setStrikeOut(n < listed && i.done);
+            p->setFont(text);
+            p->setPen(
+                foregroundColor(this, theme::color(n == listed || outside || i.done ? "ink-muted" : "ink")));
+            if (n == listed) {
+                p->drawText(words, Qt::AlignVCenter, QString("+%1 项").arg(hits.size() - listed));
+                break;
+            }
+            const QFontMetrics rowMetrics(text);
+            QString title = (wide && !i.time.isEmpty() ? i.time + " " : QString()) + i.title;
+            if (!wide) {
+                // The longest start that fits, at least one character; a narrow cell holds far fewer than 64.
+                title.truncate(64);
+                int fits = 1;
+                for (int above = title.size(); fits < above;) {
+                    const int middle = (fits + above + 1) / 2;
+                    if (rowMetrics.horizontalAdvance(title.left(middle)) <= words.width())
+                        fits = middle;
+                    else
+                        above = middle - 1;
+                }
+                title.truncate(fits);
+            }
+            p->drawText(words, Qt::AlignVCenter | Qt::TextSingleLine,
+                        wide ? rowMetrics.elidedText(title, Qt::ElideRight, int(words.width())) : title);
+            const QColor mark = foregroundColor(this, groupColor(i.group));
+            p->setOpacity(i.done ? 0.4 : 1.0);
+            p->setPen(QPen(mark, scale));
+            p->setBrush(i.type == "plan" ? QBrush(Qt::NoBrush) : QBrush(mark));
+            p->drawEllipse(QPointF(row.left() + 2.5 * scale, row.center().y()), 2.5 * scale, 2.5 * scale);
+            p->setOpacity(1.0);
+        }
+        p->restore();
+        return;
+    }
     int shown = hits.size() > maxDots ? qMax(0, maxDots - 1) : hits.size(),
         width = shown * 8 + (hits.size() > maxDots ? 20 : 0), left = area.center().x() - width / 2;
     p->save();
@@ -134,28 +210,45 @@ void Calendar::paintCell(QPainter *p, const QRect &r, const QDate &d) const {
     }
     p->restore();
 }
+QList<Item> Calendar::itemsOn(const QDate &d) const {
+    QList<Item> hits;
+    for (const auto &stored : items) {
+        // Whether an item falls on the day does not depend on its progress, so test that first.
+        if (!planOccurs(stored, d) || (stored.type != "task" && !stored.showCalendar))
+            continue;
+        const auto i = planState(stored, d);
+        if (!i.done || (showCompleted && visibleInActive(i, QDateTime::currentDateTimeUtc(), retentionHours)))
+            hits << i;
+    }
+    // Sorted with the day's progress, as the day lists are, not today's.
+    return sorted ? sorted(hits) : hits;
+}
+void Calendar::setExpanded(bool on) {
+    expanded = on;
+    expandButton->setChecked(on);
+    expandButton->setToolTip(on ? "收起日历" : "展开日历");
+    expandButton->setAccessibleName(expandButton->toolTip());
+    updateCells();
+}
 void Calendar::updateHeader() {
-    if (!titleButton)
+    if (!yearButton)
         return;
-    titleButton->setText(QString("%1 年 %2 月").arg(yearShown()).arg(monthShown()));
+    yearButton->setText(QString("%1 年").arg(yearShown()));
+    monthButton->setText(QString("%1 月").arg(monthShown()));
     const QDate today = QDate::currentDate();
     todayButton->setEnabled(selectedDate() != today || yearShown() != today.year() ||
                             monthShown() != today.month());
 }
-void Calendar::chooseMonth() {
-    QMenu menu(this);
-    menu.addAction(QString("上一年（%1）").arg(yearShown() - 1),
-                   [this] { setCurrentPage(yearShown() - 1, monthShown()); });
-    menu.addAction(QString("下一年（%1）").arg(yearShown() + 1),
-                   [this] { setCurrentPage(yearShown() + 1, monthShown()); });
-    menu.addSeparator();
-    for (int month = 1; month <= 12; ++month) {
-        auto action = menu.addAction(QString("%1 月").arg(month),
-                                     [this, month] { setCurrentPage(yearShown(), month); });
-        action->setCheckable(true);
-        action->setChecked(month == monthShown());
-    }
-    menu.exec(titleButton->mapToGlobal(QPoint(0, titleButton->height())));
+void Calendar::updateDate(const QDate &date) {
+    auto table = findChild<QAbstractItemView *>();
+    if (!table || !date.isValid())
+        return;
+    for (int row = 1; row < table->model()->rowCount(); ++row)
+        for (int column = 0; column < table->model()->columnCount(); ++column) {
+            const QRect cell = table->visualRect(table->model()->index(row, column));
+            if (dateAt(table->viewport()->mapTo(this, cell.center())) == date)
+                table->viewport()->update(cell);
+        }
 }
 QDate Calendar::dateAt(const QPoint &p) const {
     auto table = findChild<QAbstractItemView *>();
@@ -174,6 +267,20 @@ QDate Calendar::dateAt(const QPoint &p) const {
     return !displayOutside && result.month() != monthShown() ? QDate() : result;
 }
 bool Calendar::eventFilter(QObject *watched, QEvent *event) {
+    // Qt turns the month on a wheel event but leaves it unaccepted, so the page would scroll as well.
+    if (event->type() == QEvent::Wheel && !wheelChangesMonth) {
+        event->ignore();
+        return true;
+    }
+    // Cells cut titles short, so the tooltip spells out the whole day.
+    if (event->type() == QEvent::ToolTip && expanded) {
+        auto help = static_cast<QHelpEvent *>(event);
+        QStringList lines;
+        for (const auto &i : itemsOn(dateAt(static_cast<QWidget *>(watched)->mapTo(this, help->pos()))))
+            lines << (i.time.isEmpty() ? QString() : i.time + " ") + i.title;
+        QToolTip::showText(help->globalPos(), lines.join("\n"), this);
+        return true;
+    }
     if (event->type() == QEvent::MouseButtonPress) {
         auto mouse = static_cast<QMouseEvent *>(event);
         auto viewport = qobject_cast<QWidget *>(watched);
@@ -196,9 +303,11 @@ bool Calendar::eventFilter(QObject *watched, QEvent *event) {
         QDate under;
         if (auto viewport = qobject_cast<QWidget *>(watched); viewport && event->type() == QEvent::MouseMove)
             under = dateAt(viewport->mapTo(this, static_cast<QMouseEvent *>(event)->pos()));
+        // Only the cells it leaves and enters repaint: the whole grid is costly under the floating halo.
         if (under != hoverDate) {
+            updateDate(hoverDate);
             hoverDate = under;
-            updateCells();
+            updateDate(under);
         }
     }
     if (!displayOutside &&
