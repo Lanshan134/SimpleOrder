@@ -476,6 +476,7 @@ bool Controller::smokeTest(const QString &dir) {
     smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
     floatingSmokeTest(dir);
+    editorLayoutSmokeTest(dir);
 
     return true;
 }

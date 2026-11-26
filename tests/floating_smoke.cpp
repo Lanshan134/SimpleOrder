@@ -187,4 +187,187 @@ void Controller::floatingSmokeTest(const QString &directory) {
     require(cal->monthShown() == 12 && cal->selectedDate() == day, "manager calendar still turns on the wheel");
     cal->setCurrentPage(2026, 11);
     floatCal->setCurrentPage(2026, 11);
+
+    // Stretching the window never pushes content sideways or leaves a strip under it (#9).
+    Item plan;
+    plan.title = "悬浮窗布局计划";
+    plan.type = "plan";
+    plan.target = 3;
+    store.save(plan);
+    refresh();
+    setDate(dayWith(8));
+    auto list = floating->findChild<QScrollArea *>("floatingScroll");
+    const auto inside = [&](QWidget *widget, QWidget *frame) {
+        const QPoint at = widget->mapTo(frame, QPoint());
+        return at.x() >= 0 && at.x() + widget->width() <= frame->width();
+    };
+    const auto checkWidth = [&](const QString &context) {
+        for (int index : {0, 1}) {
+            stack->setCurrentIndex(index);
+            settle();
+            auto scroll = index ? page : list;
+            require(scroll->horizontalScrollBar()->maximum() == 0 && !scroll->horizontalScrollBar()->isVisible(),
+                    "floating page fits its width" + context);
+            for (auto rows : scroll->findChildren<TaskList *>())
+                require(!rows->isVisible() || inside(rows, scroll->viewport()),
+                        "floating lists stay inside the page" + context);
+            auto bar = stack->currentWidget()->findChild<QWidget *>("quickAddBar");
+            require(floating->height() - bar->mapTo(floating, QPoint(0, bar->height())).y() ==
+                        floating->layout()->contentsMargins().bottom(),
+                    "quick add keeps the bottom margin" + context);
+            require(qAbs(bar->y() - scroll->geometry().bottom() - 1) <= scaled(floating, 8),
+                    "nothing sits between the page and quick add" + context);
+        }
+        for (auto arrow : arrows)
+            require(inside(arrow, page->viewport()), "month buttons stay visible" + context);
+        const QRect sunday = grid->visualRect(grid->model()->index(2, 6));
+        require(grid->viewport()->rect().contains(sunday.center()) && inside(grid, page->viewport()) &&
+                    sunday.width() >= QFontMetrics(grid->font()).horizontalAdvance(grid->model()->index(0, 6).data().toString()),
+                "all seven weekdays stay visible and their names fit" + context);
+    };
+    for (int font : {15, 22})
+        for (bool scale : {true, false}) {
+            settings.setValue("fontSize", font);
+            for (QSize size : {QSize(390, 340), QSize(420, 480), QSize(390, 700), QSize(420, 900), QSize(390, 1200),
+                               QSize(420, 1200), QSize(800, 1000)}) {
+                resize(size, scale);
+                checkWidth(QString(" (%1x%2 font=%3 scale=%4)")
+                               .arg(size.width())
+                               .arg(size.height())
+                               .arg(font)
+                               .arg(scale));
+                if (size == QSize(420, 900) || size == QSize(390, 1200))
+                    floating->grab().save(directory + QString("/floating-tall-%1-%2-%3.png")
+                                                          .arg(size.width())
+                                                          .arg(font)
+                                                          .arg(scale));
+            }
+        }
+    settings.setValue("fontSize", 15);
+    settings.setValue("frameless", false);
+    applyFloatingAppearance();
+    resize(QSize(420, 900), true);
+    checkWidth(" (framed)");
+    require(qAbs(floatingScale - qSqrt(900.0 / 480.0)) < .01, "a moderately tall window scales by its area");
+    settings.setValue("frameless", true);
+    applyFloatingAppearance();
+    const auto metrics = [&] {
+        resize(QSize(420, 480), true);
+        QList<int> values{qRound(floatingScale * 1000), tasks->font().pixelSize(), floatDay->height(),
+                          floatCal->height(), floating->layout()->contentsMargins().bottom()};
+        stack->setCurrentIndex(0);
+        settle();
+        values << tasks->height() << plans->height();
+        stack->setCurrentIndex(1);
+        settle();
+        return values;
+    };
+    const auto original = metrics();
+    require(original.first() == 1000, "the default window keeps its exact scale");
+    for (int round = 0; round < 2; ++round) {
+        for (int height = 480; height <= 1200; height += 72)
+            floating->resize(420, height);
+        for (int height = 1200; height >= 340; height -= 86)
+            floating->resize(390, height);
+        require(metrics() == original, "repeated stretching leaves no residue");
+    }
+}
+
+// Stretching the editor gives the height to the notes instead of an empty band (#9).
+void Controller::editorLayoutSmokeTest(const QString &directory) {
+    QStringList failures;
+    const auto check = [&](bool ok, const QString &label) {
+        if (!ok)
+            failures << label;
+    };
+    const auto settle = [] {
+        for (int pass = 0; pass < 6; ++pass)
+            QApplication::processEvents();
+    };
+    const auto below = [](QWidget *widget, QWidget *root) {
+        return widget->mapTo(root, QPoint(0, widget->height())).y();
+    };
+    const auto verify = [&](QWidget *root, const QString &context) {
+        auto scroll = qobject_cast<QScrollArea *>(editor->parentWidget()->parentWidget());
+        auto bar = scroll->verticalScrollBar();
+        check(notes->height() >= 64, "notes keep two lines" + context);
+        check(!planEditor->isVisible() || planEditor->height() <= planEditor->sizeHint().height() + 1,
+              "plan fields are not spread out" + context);
+        check(saveButton->mapTo(root, QPoint()).y() >= below(scroll, root) && root->rect().contains(QRect(
+                  saveButton->mapTo(root, QPoint()), saveButton->size())), "actions stay reachable" + context);
+        // The dialog's minimum width does not follow the text size, so larger text needs more than that.
+        check(root->width() < 360 * theme::textScale || scroll->horizontalScrollBar()->maximum() == 0,
+              "editor has no sideways overflow" + context);
+        if (bar->maximum() == 0) {
+            const int blank = saveButton->mapTo(root, QPoint()).y() - below(pinned, root);
+            check(blank >= 0 && blank <= 24, "no empty band above the actions" + context + QString::number(blank));
+        } else {
+            check(notes->height() == 64, "notes give way before the form scrolls" + context);
+            bar->setValue(bar->maximum());
+            settle();
+            check(below(pinned, scroll) <= scroll->height(), "scrolling reaches the last row" + context);
+            bar->setValue(0);
+        }
+    };
+    const QList<QJsonObject> rules{{},
+                                   {{"kind", "quota"}, {"period", "week"}},
+                                   {{"kind", "dates"}, {"mode", "week"}, {"days", QJsonArray{1, 3}}},
+                                   {{"kind", "dates"}, {"mode", "month"}, {"days", QJsonArray{5, 31}}},
+                                   {{"kind", "interval"}, {"first", "2026-11-02"}, {"interval", 3}, {"basis", "fixed"}},
+                                   {{"kind", "total"}}};
+    QList<qint64> ids;
+    for (const auto &rule : rules) {
+        Item item;
+        item.title = "编辑窗口布局";
+        item.type = rule.isEmpty() ? "task" : "plan";
+        item.rule = rule;
+        ids << store.save(item).id;
+    }
+    dirty = false;
+    selected = 0;
+    refresh();
+    const auto appStyle = qApp->styleSheet();
+    for (qreal text : {1.0, 1.5}) {
+        theme::textScale = text;
+        qApp->setStyleSheet(theme::scaleText(theme::baseStyle));
+        scaleManager();
+        for (int n = 0; n < ids.size(); ++n) {
+            const QString kind = QString("%1-text%2").arg(n).arg(qRound(text * 100));
+            QTimer::singleShot(0, this, [&] {
+                auto dialog = itemWindow.data();
+                if (!dialog)
+                    return;
+                int first = 0;
+                for (QSize size : {QSize(560, 460), QSize(360, 460), QSize(560, 660), QSize(560, 1000), QSize(360, 1000),
+                                   QSize(560, 460)}) {
+                    dialog->resize(size);
+                    settle();
+                    verify(dialog, QString(" [window %1 %2x%3] ").arg(kind).arg(size.width()).arg(size.height()));
+                    if (!first)
+                        first = notes->height();
+                    if (size == QSize(560, 1000) || size == QSize(360, 460))
+                        dialog->grab().save(directory + QString("/editor-%1-%2.png").arg(kind).arg(size.height()));
+                }
+                check(notes->height() == first, "notes shrink back " + kind);
+                dialog->close();
+            });
+            editFloatingItem(ids[n]);
+            choose(ids[n]);
+            settle();
+            for (int height : {640, 1000, 640}) {
+                manager->resize(1180, height);
+                settle();
+                verify(manager, QString(" [manager %1 %2] ").arg(kind).arg(height));
+            }
+            manager->resize(1180, 1000);
+            settle();
+            manager->grab().save(directory + QString("/manager-editor-%1.png").arg(kind));
+        }
+    }
+    theme::textScale = 1.0;
+    qApp->setStyleSheet(appStyle);
+    scaleManager();
+    closeEditor();
+    if (!failures.isEmpty())
+        throw std::runtime_error(failures.join("\n").toStdString());
 }

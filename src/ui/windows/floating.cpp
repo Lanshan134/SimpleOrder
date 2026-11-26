@@ -4,6 +4,12 @@
 #include "ui/widgets/widgettools.h"
 #include <algorithm>
 
+namespace {
+// Unscaled widths: the least the page content is squeezed to, and the window the calendar reads well in.
+constexpr int MIN_CONTENT_WIDTH = 200;
+constexpr qreal FULL_CONTENT_WINDOW_WIDTH = 280;
+} // namespace
+
 void Controller::buildFloating() {
     floating = new Window(Qt::Window | Qt::WindowCloseButtonHint | Qt::WindowMinimizeButtonHint |
                           Qt::WindowTitleHint);
@@ -116,6 +122,7 @@ void Controller::buildFloating() {
     calendarScroll->setObjectName("floatingCalendarScroll");
     calendarScroll->setFrameShape(QFrame::NoFrame);
     calendarScroll->setWidgetResizable(true);
+    calendarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     calendarScroll->setWidget(calendarContent);
     cv->addWidget(calendarScroll, 1);
     cv->addWidget(quickBar("添加到选中日期", [this](QString t) {
@@ -177,11 +184,13 @@ void Controller::scaleFloating(bool force) {
     // The area-derived factor responds to either resize axis and applies uniformly
     // to text and geometry. Always scale from the original metrics, never cumulatively.
     // Windows text size enlarges the default window, so with window scaling the size carries it.
+    // A tall, narrow window stops growing its text where the calendar would no longer fit its width.
     const qreal font = settings.value("fontSize", 15).toDouble() / 15.0;
     const qreal factor =
         qBound(0.7,
                settings.value("scaleWithWindow", true).toBool()
-                   ? font * qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0))
+                   ? qMin(font * qSqrt(qreal(floating->width()) * floating->height() / (420.0 * 480.0)),
+                          floating->width() / FULL_CONTENT_WINDOW_WIDTH)
                    : font * theme::textScale,
                3.0);
     if (!force && qAbs(factor - floatingScale) < 0.005)
@@ -272,13 +281,13 @@ void Controller::scaleFloating(bool force) {
         list->setFixedHeight(qMax(1, qMin(6, list->count())) * row);
     for (auto list : {pins, tasks, plans, floatDay}) {
         const int position = list->verticalScrollBar()->value();
-        list->setMinimumWidth(px(260));
+        list->setMinimumWidth(px(MIN_CONTENT_WIDTH));
         list->verticalScrollBar()->setSingleStep(row);
         list->doItemsLayout();
         list->verticalScrollBar()->setValue(qRound(position * factor / previous));
         list->viewport()->update();
     }
-    floatCal->setMinimumSize(px(330), px(250));
+    floatCal->setMinimumSize(px(MIN_CONTENT_WIDTH), px(250));
     floatCal->repaintCells();
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setFixedSize(px(16), px(16));

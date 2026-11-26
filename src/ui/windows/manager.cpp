@@ -157,9 +157,12 @@ void Controller::buildManager() {
     progress->setRange(0, 9999);
     progress->hide();
     notes = new QPlainTextEdit;
-    notes->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    notes->setFixedHeight(64);
-    form->addWidget(editorField("备注", notes));
+    notes->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    notes->setMinimumHeight(64);
+    // Notes take the height the other fields leave over.
+    auto notesField = editorField("备注", notes);
+    notesField->layout()->setAlignment({});
+    form->addWidget(notesField, 1);
     auto checkrow = new QHBoxLayout;
     pinned = new QCheckBox("置顶");
     done = new QCheckBox(editor);
@@ -169,7 +172,6 @@ void Controller::buildManager() {
     checkrow->addStretch();
     checkrow->addWidget(showCalendar);
     form->addLayout(checkrow);
-    form->addStretch();
     auto actions = new QHBoxLayout;
     auto save = button("保存修改", "primary"), cancel = button("放弃修改"), del = button("删除", "deleteItem");
     saveButton = save;
