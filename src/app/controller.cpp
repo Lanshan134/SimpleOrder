@@ -21,7 +21,7 @@ Controller::Controller(Store &s, const QString &path, bool test, bool separateDa
     applyPreferences();
     calendarView = settings.value("defaultView", "tasks").toString() == "calendar";
     stack->setCurrentIndex(calendarView ? 1 : 0);
-    switchButton->setText(calendarView ? "列表" : "日历");
+    setGlyph(switchButton, calendarView ? Glyph::List : Glyph::Calendar, calendarView ? "返回任务列表" : "切换到日历");
     floating->findChild<QLabel *>("windowTitle")->setText(calendarView ? "日历" : "任务");
     if (!testing) {
         if (settings.value("rememberGeometry", true).toBool()) {

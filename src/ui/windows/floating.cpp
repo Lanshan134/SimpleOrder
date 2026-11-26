@@ -28,14 +28,15 @@ void Controller::buildFloating() {
     floatDate->setObjectName("floatingDate");
     head->addWidget(floatDate);
     head->addStretch();
-    switchButton = button("日历");
-    auto manage = button("管理");
-    manage->setObjectName("openManager");
-    manage->setToolTip("打开完整管理窗口");
-    auto config = button("设置");
-    head->addWidget(switchButton);
-    head->addWidget(manage);
-    head->addWidget(config);
+    // Icons with tooltips keep the title bar short, so most of it stays free for dragging.
+    switchButton = glyphButton(Glyph::Calendar, "切换到日历", "floatingSwitch");
+    auto manage = glyphButton(Glyph::Manager, "打开管理窗口", "openManager");
+    auto config = glyphButton(Glyph::Settings, "设置", "floatingSettings");
+    auto icons = new QHBoxLayout;
+    icons->setSpacing(2);
+    head->addLayout(icons);
+    for (auto b : {switchButton, manage, config})
+        icons->addWidget(b);
     outer->addWidget(titleBar);
     floating->setDragHandle(titleBar);
     stack = new QStackedWidget;
@@ -129,7 +130,7 @@ void Controller::buildFloating() {
         calendarView = !calendarView;
         stack->setCurrentIndex(calendarView ? 1 : 0);
         label->setText(calendarView ? "日历" : "任务");
-        switchButton->setText(calendarView ? "列表" : "日历");
+        setGlyph(switchButton, calendarView ? Glyph::List : Glyph::Calendar, calendarView ? "返回任务列表" : "切换到日历");
     });
     connect(manage, &QPushButton::clicked, this, [this] {
         manager->show();
@@ -206,14 +207,15 @@ void Controller::scaleFloating(bool force) {
     for (const auto &rule : style.split('\n'))
         if (rule.startsWith("QMenu"))
             menus += rule;
-    const auto recolor = [&](QString text, const QRegularExpression &pattern, qreal alpha) {
+    // Each pass maps a colour to its light-text counterpart before applying that pass's opacity.
+    const auto recolor = [&](QString text, const QRegularExpression &pattern, qreal alpha, const char *key) {
         QString out;
         int position = 0;
         auto matches = pattern.globalMatch(text);
         while (matches.hasNext()) {
             auto match = matches.next();
             out += text.mid(position, match.capturedStart() - position);
-            QColor color(match.captured(2));
+            const QColor color = floatingTone(floating, QColor(match.captured(2)), key);
             out += match.captured(1) + QString("rgba(%1,%2,%3,%4)")
                                            .arg(color.red())
                                            .arg(color.green())
@@ -225,18 +227,19 @@ void Controller::scaleFloating(bool force) {
     };
     style = recolor(
         style, QRegularExpression("((?:background|background-color)\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
-        floating->backgroundOpacity);
+        floating->backgroundOpacity, "surfaceOpacity");
     style = recolor(
         style, QRegularExpression("(?<![a-zA-Z-])((?:selection-)?color\\s*:\\s*)(#[a-fA-F0-9]{6}|white)\\b"),
         floating->property("foregroundOpacity").isValid() ? floating->property("foregroundOpacity").toDouble()
-                                                          : 1.0);
+                                                          : 1.0,
+        "foregroundOpacity");
     // Control borders fade with the text. Quick add is the window's main action: its fill ignores the
     // see-through background and stops fading at 70%, so it never reads as disabled.
     const qreal textAlpha = floating->property("foregroundOpacity").isValid()
                                 ? floating->property("foregroundOpacity").toDouble()
                                 : 1.0;
     style = recolor(style, QRegularExpression("(border(?:-[a-z]+)?\\s*:\\s*[^;{}#]*)(#[a-fA-F0-9]{6})\\b"),
-                    textAlpha);
+                    textAlpha, "foregroundOpacity");
     const auto fill = [textAlpha](const char *token) {
         const QColor color = theme::color(token);
         return QString("rgba(%1,%2,%3,%4)")
@@ -296,10 +299,14 @@ void Controller::applyFloatingAppearance() {
     bool visible = floating->isVisible();
     floating->setWindowFlag(Qt::FramelessWindowHint, settings.value("frameless", true).toBool());
     floating->setWindowOpacity(1.0);
+    floating->setProperty("lightText", settings.value("floatingText", "dark") == "light");
     floating->backgroundOpacity = qBound(0, settings.value("opacity", 100).toInt(), 100) / 100.0;
     floating->setProperty("surfaceOpacity", floating->backgroundOpacity);
     floating->setProperty("foregroundOpacity",
                           qBound(MIN_TEXT_OPACITY, settings.value("textOpacity", 100).toInt(), 100) / 100.0);
+    // The halo, and secondary text at full ink, only while the desktop shows through.
+    const bool halo = settings.value("floatingHalo", true).toBool() && floating->backgroundOpacity < HALO_BELOW;
+    floating->setProperty("strongInk", halo);
     // Only weekends carry a format, as on the manager calendar, so weekday headers keep the muted header ink.
     for (int weekday = 6; weekday <= 7; ++weekday) {
         QTextCharFormat format;
@@ -316,6 +323,8 @@ void Controller::applyFloatingAppearance() {
     }
     if (auto grip = floating->findChild<QSizeGrip *>())
         grip->setVisible(settings.value("frameless", true).toBool());
+    for (auto area : {floating->findChild<QLabel *>("windowTitle")->parentWidget(), static_cast<QWidget *>(stack)})
+        area->setGraphicsEffect(halo ? haloEffect(floating) : nullptr);
     if (visible)
         floating->show();
     scaleFloating(true);

@@ -475,7 +475,7 @@ bool Controller::smokeTest(const QString &dir) {
     smartEntryParserTests();
     smartEntrySmokeTest(dir);
     require(settingsSmokeTest(dir), "classified settings regression");
-    interactionSmokeTest();
+    interactionSmokeTest(dir);
 
     return true;
 }
@@ -803,6 +803,8 @@ void Controller::draftSmokeTest(const QString &dir) {
     choose(otherId);
     require(selected == otherId, "unchanged form switches without prompt");
     settings.setValue("frameless", true);
+    // These checks measure the faded colours themselves, without the legibility halo.
+    settings.setValue("floatingHalo", false);
     settings.setValue("opacity", 20);
     settings.setValue("textOpacity", 100);
     applyFloatingAppearance();
@@ -895,6 +897,7 @@ void Controller::draftSmokeTest(const QString &dir) {
     settingsWindow->reject();
     settings.setValue("opacity", 100);
     settings.setValue("textOpacity", 100);
+    settings.remove("floatingHalo");
     applyFloatingAppearance();
     dirty = false;
 }

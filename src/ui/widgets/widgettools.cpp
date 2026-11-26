@@ -3,6 +3,7 @@
 #include "ui/widgets/editorwidgets.h"
 #include "ui/widgets/smartentry.h"
 #include "ui/theme/appearance.h"
+#include <QtMath>
 
 namespace {
 class GlyphButton : public QPushButton {
@@ -11,13 +12,21 @@ class GlyphButton : public QPushButton {
   public:
     GlyphButton(Glyph kind, const QString &label, const QString &name) : glyph(kind) {
         setObjectName(name);
-        setAccessibleName(label);
-        setToolTip(label);
         setCursor(Qt::PointingHandCursor);
         setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        set(kind, label);
+    }
+    void set(Glyph kind, const QString &label) {
+        glyph = kind;
+        setAccessibleName(label);
+        setToolTip(label);
+        update();
     }
     QSize sizeHint() const override {
-        const int side = qRound((glyph == Glyph::Plus ? 32 : 26) * widgetScale(this));
+        const int base = glyph == Glyph::Plus                             ? 32
+                         : glyph == Glyph::Left || glyph == Glyph::Right ? 26
+                                                                         : 28;
+        const int side = qRound(base * widgetScale(this));
         return QSize(side, side);
     }
     QSize minimumSizeHint() const override {
@@ -36,6 +45,45 @@ class GlyphButton : public QPushButton {
                                                   : foregroundColor(this, theme::color("ink-control"));
         p.setPen(QPen(ink, 1.6 * unit, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         const QPointF c = QRectF(rect()).center();
+        if (glyph != Glyph::Plus && glyph != Glyph::Left && glyph != Glyph::Right) {
+            // The title bar icons share a 16-unit grid centred on the button.
+            // Half a pixel keeps the straight strokes on one pixel column at 100%.
+            p.translate(c + QPointF(.5, .5));
+            p.scale(unit, unit);
+            p.setPen(QPen(ink, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            if (glyph == Glyph::Calendar) {
+                p.drawRoundedRect(QRectF(-6, -5, 12, 11), 2, 2);
+                p.drawLine(QPointF(-6, -1.5), QPointF(6, -1.5));
+                p.drawLine(QPointF(-2.75, -7), QPointF(-2.75, -4));
+                p.drawLine(QPointF(2.75, -7), QPointF(2.75, -4));
+            } else if (glyph == Glyph::List) {
+                for (qreal y : {-4.5, 0.0, 4.5})
+                    p.drawLine(QPointF(-2, y), QPointF(6.5, y));
+                p.setPen(Qt::NoPen);
+                p.setBrush(ink);
+                for (qreal y : {-4.5, 0.0, 4.5})
+                    p.drawEllipse(QPointF(-5.5, y), 1.2, 1.2);
+            } else if (glyph == Glyph::Manager) {
+                // A window with a list pane: the manager.
+                p.drawRoundedRect(QRectF(-7, -5.5, 14, 11), 2, 2);
+                p.drawLine(QPointF(-2, -5.5), QPointF(-2, 5.5));
+                p.drawLine(QPointF(-5, -2.5), QPointF(-4, -2.5));
+                p.drawLine(QPointF(-5, 0.5), QPointF(-4, 0.5));
+            } else {
+
+                QPolygonF gear;
+                for (int tooth = 0; tooth < 8; ++tooth) {
+                    const qreal middle = tooth * M_PI / 4;
+                    const QPair<qreal, qreal> corners[] = {{-.30, 5.1}, {-.17, 7}, {.17, 7}, {.30, 5.1}};
+                    for (auto corner : corners)
+                        gear << QPointF(qCos(middle + corner.first), qSin(middle + corner.first)) * corner.second;
+                }
+                p.setPen(QPen(ink, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                p.drawPolygon(gear);
+                p.drawEllipse(QPointF(), 2.3, 2.3);
+            }
+            return;
+        }
         if (glyph == Glyph::Plus) {
             p.drawLine(c + QPointF(-5 * unit, 0), c + QPointF(5 * unit, 0));
             p.drawLine(c + QPointF(0, -5 * unit), c + QPointF(0, 5 * unit));
@@ -166,6 +214,10 @@ QLabel *heading(const QString &s, const QString &name) {
 }
 QPushButton *glyphButton(Glyph glyph, const QString &label, const QString &name) {
     return new GlyphButton(glyph, label, name);
+}
+void setGlyph(QPushButton *button, Glyph glyph, const QString &label) {
+    if (auto target = dynamic_cast<GlyphButton *>(button))
+        target->set(glyph, label);
 }
 
 QIcon typeDot(const QString &color) {

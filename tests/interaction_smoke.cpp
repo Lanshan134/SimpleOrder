@@ -1,5 +1,6 @@
 #include "app/controller.h"
 #include "ui/widgets/smartentry.h"
+#include "ui/widgets/widgettools.h"
 #include "ui/windows/settings.h"
 
 namespace {
@@ -16,7 +17,7 @@ class DragProbe : public TaskList {
 } // namespace
 
 // Floating list, calendar and title gestures each trigger exactly the action they are meant to (#18).
-void Controller::interactionSmokeTest() {
+void Controller::interactionSmokeTest(const QString &dir) {
     auto require = [](bool ok, const char *why) {
         if (!ok)
             throw std::runtime_error(why);
@@ -254,4 +255,64 @@ void Controller::interactionSmokeTest() {
     settings.setValue("opacity", 100);
     settings.setValue("textOpacity", 100);
     applyFloatingAppearance();
+
+    // #2: the title bar is three icon buttons that name themselves.
+    auto config = floating->findChild<QPushButton *>("floatingSettings");
+    auto openManager = floating->findChild<QPushButton *>("openManager");
+    require(config && openManager && switchButton->text().isEmpty() && switchButton->size() == QSize(28, 28) &&
+                switchButton->accessibleName() == "切换到日历" && switchButton->toolTip() == "切换到日历" &&
+                openManager->accessibleName() == "打开管理窗口" && config->accessibleName() == "设置",
+            "icon title bar with names and tooltips");
+    switchButton->click();
+    require(calendarView && switchButton->accessibleName() == "返回任务列表", "view switch renames its icon");
+    switchButton->click();
+    // Text colour and halo round-trip through settings; the halo applies only below the threshold.
+    settingsDialog();
+    auto tone = settingsWindow->findChild<QComboBox *>("setting_floatingText");
+    auto halo = settingsWindow->findChild<QCheckBox *>("setting_floatingHalo");
+    auto opacity = settingsWindow->findChild<QSlider *>("setting_opacity");
+    require(tone && halo && halo->isChecked() && tone->currentData() == "dark", "legibility settings default");
+    auto haloOn = [&] {
+        return floating->findChild<QLabel *>("windowTitle")->parentWidget()->graphicsEffect() && stack->graphicsEffect();
+    };
+    opacity->setValue(qRound(HALO_BELOW * 100));
+    require(!haloOn() && foregroundColor(tasks, theme::color("ink-muted")) == theme::color("ink-muted"),
+            "no halo at the threshold");
+    opacity->setValue(qRound(HALO_BELOW * 100) - 1);
+    require(haloOn() && foregroundColor(tasks, theme::color("ink-muted")).rgb() == theme::color("ink").rgb(),
+            "halo and full ink below the threshold");
+    tone->setCurrentIndex(tone->findData("light"));
+    opacity->setValue(20);
+    require(settings.value("floatingText") == "light" &&
+                foregroundColor(tasks, theme::color("ink")).rgb() == QColor("#f5f7fa").rgb(),
+            "light text persists and applies");
+    QImage dark(floating->size(), QImage::Format_RGB32);
+    {
+        QPainter painter(&dark);
+        QLinearGradient gradient(0, 0, dark.width(), dark.height());
+        gradient.setColorAt(0, QColor("#10141c"));
+        gradient.setColorAt(1, QColor("#2a3242"));
+        painter.fillRect(dark.rect(), gradient);
+        painter.drawImage(0, 0, floating->grab().toImage());
+    }
+    dark.save(dir + "/floating-light-text-20-over-dark.png");
+    tone->setCurrentIndex(tone->findData("dark"));
+    {
+        QPainter painter(&dark);
+        QLinearGradient gradient(0, 0, dark.width(), dark.height());
+        gradient.setColorAt(0, QColor("#10141c"));
+        gradient.setColorAt(1, QColor("#2a3242"));
+        painter.fillRect(dark.rect(), gradient);
+        painter.drawImage(0, 0, floating->grab().toImage());
+    }
+    dark.save(dir + "/floating-halo-20-over-dark.png");
+    halo->setChecked(false);
+    require(settings.value("floatingHalo") == false && !haloOn(), "halo can be turned off");
+    settingsWindow->findChild<QListWidget *>("settingsNavigation")->setCurrentRow(0);
+    for (auto button : settingsWindow->findChildren<QPushButton *>())
+        if (button->text() == "恢复本页默认值")
+            button->click();
+    require(halo->isChecked() && tone->currentData() == "dark" && !haloOn(), "page reset restores the defaults");
+    settingsWindow->reject();
+    QApplication::processEvents();
 }

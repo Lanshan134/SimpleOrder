@@ -38,7 +38,8 @@ void Window::paintEvent(QPaintEvent *event) {
         return;
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    QColor border = theme::color("line"), background = theme::color("surface");
+    QColor border = floatingTone(this, theme::color("line"), "surfaceOpacity"),
+           background = floatingTone(this, theme::color("surface"), "surfaceOpacity");
     border.setAlphaF(backgroundOpacity);
     background.setAlphaF(backgroundOpacity);
     p.setPen(QPen(border, 1));
